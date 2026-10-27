@@ -1,5 +1,4 @@
-import 'dart:developer' as developer;
-
+import 'dart:io';
 import 'package:backend/src/features/auth/application/auth_service.dart';
 import 'package:backend/src/features/auth/data/auth_repository.dart';
 import 'package:dart_frog/dart_frog.dart';
@@ -70,12 +69,8 @@ Future<Response> onRequest(RequestContext context) async {
       body: {'error': error.message},
     );
   } catch (error, stackTrace) {
-    developer.log(
-      'Registration failed',
-      error: error,
-      stackTrace: stackTrace,
-      name: 'auth.register',
-    );
+    stderr..writeln('Registration failed: $error')
+    ..writeln(stackTrace);
 
     return Response.json(
       statusCode: 500,
