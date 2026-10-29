@@ -1,16 +1,28 @@
+
 import 'package:flutter/material.dart';
 
+import 'features/auth/presentation/screens/login_screen.dart';
+
 void main() {
-  runApp(const MainApp());
+  runApp(const RastgariJavidApp());
 }
 
-class MainApp extends StatelessWidget {
-  const MainApp({super.key});
+class RastgariJavidApp extends StatelessWidget {
+  const RastgariJavidApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: Scaffold(body: Center(child: Text('Hello World!'))),
+    return MaterialApp(
+      title: 'رستگاری جاوید',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
+        inputDecorationTheme: const InputDecorationTheme(
+          alignLabelWithHint: true,
+        ),
+      ),
+      home: const LoginScreen(),
     );
   }
 }
