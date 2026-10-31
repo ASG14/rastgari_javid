@@ -1,4 +1,3 @@
-
 // ignore_for_file: prefer_initializing_formals
 
 import 'package:flutter/material.dart';
@@ -6,10 +5,8 @@ import 'package:flutter/material.dart';
 import '../../data/auth_repository.dart';
 
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({
-    super.key,
-    AuthRepository? authRepository,
-  }) : _authRepository = authRepository;
+  const RegisterScreen({super.key, AuthRepository? authRepository})
+    : _authRepository = authRepository;
 
   final AuthRepository? _authRepository;
 
@@ -75,10 +72,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString()),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(error.toString()), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) {
@@ -209,9 +203,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ? const SizedBox(
                             width: 22,
                             height: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                            ),
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Text('ثبت‌نام'),
                   ),

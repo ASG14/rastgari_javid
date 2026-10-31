@@ -1,17 +1,14 @@
-
 // ignore_for_file: prefer_initializing_formals
 
 import 'package:flutter/material.dart';
 
 import '../../data/auth_repository.dart';
-import '../../models/auth_response.dart';
 import 'register_screen.dart';
+import '../../../home/presentation/screens/home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({
-    super.key,
-    AuthRepository? authRepository,
-  }) : _authRepository = authRepository;
+  const LoginScreen({super.key, AuthRepository? authRepository})
+    : _authRepository = authRepository;
 
   final AuthRepository? _authRepository;
 
@@ -48,27 +45,24 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final AuthResponse response = await _authRepository.login(
+      final response = await _authRepository.login(
         username: _usernameController.text.trim(),
         password: _passwordController.text,
       );
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('خوش آمدی ${response.user.displayName}'),
-          backgroundColor: Colors.green,
+      await Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              HomeScreen(user: response.user, authRepository: _authRepository),
         ),
       );
     } catch (error) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString()),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(error.toString()), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) {
@@ -99,10 +93,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const Text(
                     'خوش آمدی!',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 32),
                   TextFormField(
@@ -156,9 +147,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ? const SizedBox(
                             height: 22,
                             width: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                            ),
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Text('ورود'),
                   ),
