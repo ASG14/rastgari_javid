@@ -150,4 +150,59 @@ class AuthService {
         'created_at': user['created_at'].toString(),
     };
   }
+  /// Verifies an access token and returns the current user's public data.
+Future<Map<String, dynamic>> getCurrentUser(String token) async {
+  final secret = Platform.environment['RJ_JWT_SECRET'];
+
+  if (secret == null || secret.length < 32) {
+    throw StateError(
+      'RJ_JWT_SECRET must be configured with at least 32 characters.',
+    );
+  }
+
+  late final Map<String, dynamic> payload;
+
+  try {
+    final jwt = JWT.verify(token, SecretKey(secret));
+    final decodedPayload = jwt.payload;
+
+    if (decodedPayload is! Map<String, dynamic>) {
+      throw const FormatException('Invalid token payload.');
+    }
+
+    payload = decodedPayload;
+  } catch (_) {
+    throw AuthException(
+      'توکن ورود نامعتبر یا منقضی شده است.',
+      statusCode: 401,
+    );
+  }
+
+  final userId = int.tryParse(payload['sub']?.toString() ?? '');
+
+  if (userId == null) {
+    throw AuthException(
+      'توکن ورود معتبر نیست.',
+      statusCode: 401,
+    );
+  }
+
+  final user = await _repository.findById(userId);
+
+  if (user == null) {
+    throw AuthException(
+      'کاربر موردنظر یافت نشد.',
+      statusCode: 401,
+    );
+  }
+
+  if (user['status'] != 'active') {
+    throw AuthException(
+      'این حساب کاربری فعال نیست.',
+      statusCode: 403,
+    );
+  }
+
+  return _publicUser(user);
+}
 }

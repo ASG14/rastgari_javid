@@ -107,4 +107,27 @@ class AuthRepository {
       parameters: {'id': userId},
     );
   }
+  /// Finds an active user by ID without exposing sensitive fields.
+Future<Map<String, dynamic>?> findById(int userId) async {
+  final result = await database.execute(
+    Sql.named('''
+      SELECT
+        id,
+        username,
+        display_name,
+        email,
+        created_at,
+        status
+      FROM public.users
+      WHERE id = @id
+        AND deleted_at IS NULL
+      LIMIT 1
+    '''),
+    parameters: {'id': userId},
+  );
+
+  if (result.isEmpty) return null;
+
+  return result.first.toColumnMap();
+}
 }
