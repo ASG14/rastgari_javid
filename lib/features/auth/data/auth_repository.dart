@@ -58,6 +58,39 @@ class AuthRepository {
     return authResponse;
   }
 
+  /// اطلاعات کاربر را با توکن ذخیره‌شده از سرور دریافت می‌کند.
+  ///
+  /// اگر توکنی وجود نداشته باشد یا سرور آن را رد کند، null برمی‌گرداند.
+  /// خطاهای دیگر، مانند قطع بودن سرور، به فراخواننده منتقل می‌شوند.
+  Future<AuthUser?> getCurrentUser() async {
+    final token = await _tokenStorage.readToken();
+
+    if (token == null || token.isEmpty) {
+      return null;
+    }
+
+    try {
+      final response = await _apiClient.get('/auth/me', token: token);
+
+      final data = response['data'];
+
+      if (data is! Map<String, dynamic>) {
+        throw const ApiException(
+          'ساختار پاسخ دریافت اطلاعات کاربر نامعتبر است.',
+        );
+      }
+
+      return AuthUser.fromJson(data);
+    } on ApiException catch (error) {
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        await _tokenStorage.deleteToken();
+        return null;
+      }
+
+      rethrow;
+    }
+  }
+
   Future<void> logout() async {
     await _tokenStorage.deleteToken();
   }

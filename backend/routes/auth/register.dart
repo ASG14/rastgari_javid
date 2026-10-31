@@ -69,8 +69,9 @@ Future<Response> onRequest(RequestContext context) async {
       body: {'error': error.message},
     );
   } catch (error, stackTrace) {
-    stderr..writeln('Registration failed: $error')
-    ..writeln(stackTrace);
+    stderr
+      ..writeln('Registration failed: $error')
+      ..writeln(stackTrace);
 
     return Response.json(
       statusCode: 500,

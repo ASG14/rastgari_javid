@@ -107,10 +107,11 @@ class AuthRepository {
       parameters: {'id': userId},
     );
   }
+
   /// Finds an active user by ID without exposing sensitive fields.
-Future<Map<String, dynamic>?> findById(int userId) async {
-  final result = await database.execute(
-    Sql.named('''
+  Future<Map<String, dynamic>?> findById(int userId) async {
+    final result = await database.execute(
+      Sql.named('''
       SELECT
         id,
         username,
@@ -123,11 +124,11 @@ Future<Map<String, dynamic>?> findById(int userId) async {
         AND deleted_at IS NULL
       LIMIT 1
     '''),
-    parameters: {'id': userId},
-  );
+      parameters: {'id': userId},
+    );
 
-  if (result.isEmpty) return null;
+    if (result.isEmpty) return null;
 
-  return result.first.toColumnMap();
-}
+    return result.first.toColumnMap();
+  }
 }
