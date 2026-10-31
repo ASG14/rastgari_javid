@@ -5,6 +5,7 @@ import 'features/auth/data/auth_repository.dart';
 import 'features/auth/models/auth_user.dart';
 import 'features/auth/presentation/screens/login_screen.dart';
 import 'features/home/presentation/screens/home_screen.dart';
+import 'app/app_shell.dart';
 
 void main() {
   runApp(const RastgariJavidApp());
@@ -141,7 +142,7 @@ class _RastgariJavidAppState extends State<RastgariJavidApp> {
     }
 
     if (_currentUser != null) {
-      return HomeScreen(user: _currentUser!, authRepository: _authRepository);
+      return AppShell(user: _currentUser!, authRepository: _authRepository);
     }
 
     return LoginScreen(authRepository: _authRepository);
