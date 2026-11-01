@@ -1,13 +1,13 @@
 import 'package:backend/src/features/comments/data/comment_repository.dart';
 
-/// Handles application rules for post comments.
+/// Handles application rules for post comments and replies.
 class CommentService {
   /// Creates a service with its repository dependency.
   CommentService(this._repository);
 
   final CommentRepository _repository;
 
-  /// Returns top-level comments for a public post.
+  /// Returns top-level comments and replies for a public post.
   Future<List<Map<String, dynamic>>?> getPostComments({
     required int postId,
   }) {
@@ -18,14 +18,19 @@ class CommentService {
     return _repository.getPostComments(postId: postId);
   }
 
-  /// Publishes a comment for an authenticated user.
+  /// Publishes a comment or a reply for an authenticated user.
   Future<Map<String, dynamic>?> createComment({
     required int postId,
     required int userId,
     required String content,
+    int? parentCommentId,
   }) {
     if (postId < 1 || userId < 1) {
       throw const CommentException('شناسه پست یا کاربر معتبر نیست.');
+    }
+
+    if (parentCommentId != null && parentCommentId < 1) {
+      throw const CommentException('شناسه دیدگاه والد معتبر نیست.');
     }
 
     final normalizedContent = content.trim();
@@ -44,6 +49,7 @@ class CommentService {
       postId: postId,
       userId: userId,
       content: normalizedContent,
+      parentCommentId: parentCommentId,
     );
   }
 }

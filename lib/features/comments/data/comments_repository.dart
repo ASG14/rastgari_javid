@@ -37,6 +37,7 @@ class CommentsRepository {
     required String postId,
     required String content,
     required String token,
+    String? parentCommentId,
   }) async {
     final normalizedContent = content.trim();
 
@@ -50,10 +51,22 @@ class CommentsRepository {
       );
     }
 
+    final body = <String, dynamic>{'content': normalizedContent};
+
+    if (parentCommentId != null) {
+      final parsedParentId = int.tryParse(parentCommentId);
+
+      if (parsedParentId == null || parsedParentId < 1) {
+        throw const ApiException('شناسه دیدگاه والد معتبر نیست.');
+      }
+
+      body['parent_comment_id'] = parsedParentId;
+    }
+
     final response = await _apiClient.post(
       '/posts/${Uri.encodeComponent(postId)}/comments',
       token: token,
-      body: {'content': normalizedContent},
+      body: body,
     );
 
     final data = response['data'];

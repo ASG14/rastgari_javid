@@ -7,13 +7,17 @@ class Comment {
     required this.author,
     required this.content,
     required this.createdAt,
+    this.parentCommentId,
   });
 
   final String id;
   final String postId;
+  final String? parentCommentId;
   final PostAuthor author;
   final String content;
   final DateTime createdAt;
+
+  bool get isReply => parentCommentId != null;
 
   factory Comment.fromJson(Map<String, dynamic> json) {
     final authorJson = json['author'];
@@ -33,9 +37,12 @@ class Comment {
       throw const FormatException('تاریخ دیدگاه قابل پردازش نیست.');
     }
 
+    final rawParentId = json['parent_comment_id'];
+
     return Comment(
       id: json['id'].toString(),
       postId: json['post_id'].toString(),
+      parentCommentId: rawParentId?.toString(),
       author: PostAuthor.fromJson(Map<String, dynamic>.from(authorJson)),
       content: json['content'] is String ? json['content'] as String : '',
       createdAt: parsedDate.toLocal(),

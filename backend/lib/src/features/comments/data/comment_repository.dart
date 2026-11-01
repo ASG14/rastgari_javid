@@ -1,13 +1,13 @@
 import 'package:backend/src/core/database/database_pool.dart';
 import 'package:postgres/postgres.dart';
 
-/// Handles database operations for post comments.
+/// Handles database operations for post comments and replies.
 class CommentRepository {
-  /// Returns visible top-level comments for a public post.
+  /// Returns visible top-level comments and their replies for a public post.
   Future<List<Map<String, dynamic>>?> getPostComments({
     required int postId,
   }) async {
-    final result = await database.execute(
+    final postResult = await database.execute(
       Sql.named('''
         SELECT p.id
         FROM public.posts AS p
@@ -23,14 +23,27 @@ class CommentRepository {
       parameters: {'postId': postId},
     );
 
-    if (result.isEmpty) return null;
+    if (postResult.isEmpty) return null;
 
-    final comments = await database.execute(
+    final result = await database.execute(
       Sql.named('''
+        WITH visible_top_level AS (
+          SELECT c.id
+          FROM public.comments AS c
+          JOIN public.users AS u ON u.id = c.user_id
+          WHERE c.post_id = @postId
+            AND c.parent_comment_id IS NULL
+            AND c.deleted_at IS NULL
+            AND u.status = 'active'
+            AND u.deleted_at IS NULL
+          ORDER BY c.created_at ASC, c.id ASC
+          LIMIT 100
+        )
         SELECT
           c.id,
           c.post_id,
           c.user_id,
+          c.parent_comment_id,
           c.content,
           c.created_at,
           u.username,
@@ -39,22 +52,30 @@ class CommentRepository {
         FROM public.comments AS c
         JOIN public.users AS u ON u.id = c.user_id
         WHERE c.post_id = @postId
-          AND c.parent_comment_id IS NULL
           AND c.deleted_at IS NULL
           AND u.status = 'active'
           AND u.deleted_at IS NULL
-        ORDER BY c.created_at ASC, c.id ASC
-        LIMIT 100
+          AND (
+            c.id IN (SELECT id FROM visible_top_level)
+            OR c.parent_comment_id IN (SELECT id FROM visible_top_level)
+          )
+        ORDER BY
+          COALESCE(c.parent_comment_id, c.id) ASC,
+          (c.parent_comment_id IS NOT NULL) ASC,
+          c.created_at ASC,
+          c.id ASC
+        LIMIT 600
       '''),
       parameters: {'postId': postId},
     );
 
-    return comments.map((row) {
+    return result.map((row) {
       final data = row.toColumnMap();
 
       return {
         'id': data['id'],
         'post_id': data['post_id'],
+        'parent_comment_id': data['parent_comment_id'],
         'content': data['content'],
         'created_at': data['created_at']?.toString(),
         'author': {
@@ -67,11 +88,15 @@ class CommentRepository {
     }).toList();
   }
 
-  /// Creates a comment and increments the post's comment counter atomically.
+  /// Creates a comment or a reply and updates the post comment counter.
+  ///
+  /// When [parentCommentId] is provided, it must identify a visible,
+  /// top-level comment belonging to the same post.
   Future<Map<String, dynamic>?> createComment({
     required int postId,
     required int userId,
     required String content,
+    int? parentCommentId,
   }) {
     return database.runTx((session) async {
       final postResult = await session.execute(
@@ -106,23 +131,55 @@ class CommentRepository {
 
       if (userResult.isEmpty) return null;
 
+      if (parentCommentId != null) {
+        final parentResult = await session.execute(
+          Sql.named('''
+            SELECT c.id
+            FROM public.comments AS c
+            JOIN public.users AS u ON u.id = c.user_id
+            WHERE c.id = @parentCommentId
+              AND c.post_id = @postId
+              AND c.parent_comment_id IS NULL
+              AND c.deleted_at IS NULL
+              AND u.status = 'active'
+              AND u.deleted_at IS NULL
+            LIMIT 1
+          '''),
+          parameters: {
+            'parentCommentId': parentCommentId,
+            'postId': postId,
+          },
+        );
+
+        if (parentResult.isEmpty) return null;
+      }
+
       final inserted = await session.execute(
         Sql.named('''
           INSERT INTO public.comments (
             post_id,
             user_id,
+            parent_comment_id,
             content
           )
           VALUES (
             @postId,
             @userId,
+            @parentCommentId,
             @content
           )
-          RETURNING id, post_id, user_id, content, created_at
+          RETURNING
+            id,
+            post_id,
+            user_id,
+            parent_comment_id,
+            content,
+            created_at
         '''),
         parameters: {
           'postId': postId,
           'userId': userId,
+          'parentCommentId': parentCommentId,
           'content': content,
         },
       );
@@ -158,6 +215,7 @@ class CommentRepository {
       return {
         'id': row['id'],
         'post_id': row['post_id'],
+        'parent_comment_id': row['parent_comment_id'],
         'content': row['content'],
         'created_at': row['created_at']?.toString(),
         'author': {

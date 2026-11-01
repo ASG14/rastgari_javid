@@ -146,6 +146,23 @@ Future<Response> _createComment(
       body: {'error': 'متن دیدگاه الزامی است.'},
     );
   }
+  final rawParentCommentId = decoded['parent_comment_id'];
+  int? parentCommentId;
+
+  if (rawParentCommentId != null) {
+    if (rawParentCommentId is int) {
+      parentCommentId = rawParentCommentId;
+    } else if (rawParentCommentId is String) {
+      parentCommentId = int.tryParse(rawParentCommentId);
+    }
+
+    if (parentCommentId == null || parentCommentId < 1) {
+      return Response.json(
+        statusCode: 400,
+        body: {'error': 'شناسه دیدگاه والد معتبر نیست.'},
+      );
+    }
+  }
 
   final userId = int.tryParse(user['id']?.toString() ?? '');
 
@@ -161,12 +178,15 @@ Future<Response> _createComment(
       postId: postId,
       userId: userId,
       content: content,
+      parentCommentId: parentCommentId,
     );
 
     if (comment == null) {
       return Response.json(
         statusCode: 404,
-        body: {'error': 'پست یا حساب کاربری فعال یافت نشد.'},
+        body: {
+          'error': 'پست، حساب کاربری یا دیدگاه والد معتبر نیست.',
+        },
       );
     }
 
