@@ -91,7 +91,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-
 class _HomeTab extends StatelessWidget {
   const _HomeTab({required this.user});
 

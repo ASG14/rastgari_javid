@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import '../../models/post.dart';
@@ -164,8 +163,7 @@ class _PostCardState extends State<PostCard> {
               ),
             ),
           ),
-          if (widget.post.mediaUrl != null &&
-              widget.post.mediaUrl!.isNotEmpty)
+          if (widget.post.mediaUrl != null && widget.post.mediaUrl!.isNotEmpty)
             _PostMedia(url: widget.post.mediaUrl!),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
@@ -241,10 +239,7 @@ class _PostCardState extends State<PostCard> {
 }
 
 class _AuthorAvatar extends StatelessWidget {
-  const _AuthorAvatar({
-    required this.displayName,
-    this.avatarUrl,
-  });
+  const _AuthorAvatar({required this.displayName, this.avatarUrl});
 
   final String displayName;
   final String? avatarUrl;
