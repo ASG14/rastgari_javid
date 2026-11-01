@@ -5,6 +5,7 @@ import '../../../auth/models/auth_user.dart';
 import '../../data/posts_repository.dart';
 import '../../models/post.dart';
 import '../widgets/post_card.dart';
+import '../../../comments/presentation/screens/post_comments_screen.dart';
 
 class PostFeedScreen extends StatefulWidget {
   const PostFeedScreen({
@@ -157,14 +158,20 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
                 PostCard(
                   key: ValueKey(post.id),
                   post: post,
-                  onLikeChanged: (isLiked) =>
-                      _handleLikeChanged(post, isLiked),
-                  onCommentsTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('بخش گفتگوها در مرحله بعد اضافه می‌شود.'),
+                  onLikeChanged: (isLiked) => _handleLikeChanged(post, isLiked),
+                  onCommentsTap: () async {
+                    await Navigator.of(context).push<bool>(
+                      MaterialPageRoute<bool>(
+                        builder: (context) => PostCommentsScreen(
+                          post: post,
+                          authRepository: widget.authRepository,
+                        ),
                       ),
                     );
+
+                    if (mounted) {
+                      await _loadPosts();
+                    }
                   },
                   onShareTap: () {
                     ScaffoldMessenger.of(context).showSnackBar(
