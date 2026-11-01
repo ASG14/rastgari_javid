@@ -4,6 +4,7 @@ import '../../../auth/data/auth_repository.dart';
 import '../../../auth/models/auth_user.dart';
 import '../../../auth/presentation/screens/login_screen.dart';
 import '../widgets/app_bottom_navigation.dart';
+import '../../../posts/presentation/screens/post_feed_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -90,6 +91,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+
 class _HomeTab extends StatelessWidget {
   const _HomeTab({required this.user});
 
@@ -97,40 +99,7 @@ class _HomeTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        Text(
-          'سلام ${user.displayName}!',
-          style: Theme.of(context).textTheme.headlineSmall,
-        ),
-        const SizedBox(height: 8),
-        const Text('به رستگاری جاوید خوش آمدی.'),
-        const SizedBox(height: 24),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.favorite_border, size: 32),
-                const SizedBox(height: 12),
-                Text(
-                  'اینجا برای همراهی هستیم',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'در این فضا می‌توانیم تجربه‌ها، خاطره‌ها و '
-                  'مطالبی را به اشتراک بگذاریم که به همدلی '
-                  'و همراهی افراد کمک می‌کنند.',
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
+    return PostFeedScreen(user: user);
   }
 }
 
