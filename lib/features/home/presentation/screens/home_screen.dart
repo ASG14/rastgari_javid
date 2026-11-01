@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../auth/models/auth_user.dart';
 import '../../../auth/presentation/screens/login_screen.dart';
-import '../widgets/app_bottom_navigation.dart';
+import '../../../posts/models/post.dart';
+import '../../../posts/presentation/screens/create_post_screen.dart';
 import '../../../posts/presentation/screens/post_feed_screen.dart';
+import '../widgets/app_bottom_navigation.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -22,6 +24,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  int _feedRefreshVersion = 0;
   bool _isLoggingOut = false;
 
   Future<void> _logout() async {
@@ -49,6 +52,20 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _handlePostCreated(Post post) {
+    setState(() {
+      _feedRefreshVersion++;
+      _currentIndex = 0;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('نوشته با موفقیت منتشر شد.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final titles = ['خانه', 'گفتگوها', 'افزودن پست', 'رویدادها', 'پروفایل من'];
@@ -58,16 +75,15 @@ class _HomeScreenState extends State<HomeScreen> {
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          _HomeTab(user: widget.user),
+          _HomeTab(user: widget.user, feedRefreshVersion: _feedRefreshVersion),
           const _PlaceholderTab(
             icon: Icons.chat_bubble_outline,
             title: 'گفتگوها',
             description: 'گفتگوهای خصوصی در این بخش قرار می‌گیرند.',
           ),
-          const _PlaceholderTab(
-            icon: Icons.add_circle_outline,
-            title: 'افزودن پست',
-            description: 'امکان انتشار پست در مرحله بعد اضافه می‌شود.',
+          CreatePostScreen(
+            authRepository: widget.authRepository,
+            onPostCreated: _handlePostCreated,
           ),
           const _PlaceholderTab(
             icon: Icons.event_outlined,
@@ -92,13 +108,14 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _HomeTab extends StatelessWidget {
-  const _HomeTab({required this.user});
+  const _HomeTab({required this.user, required this.feedRefreshVersion});
 
   final AuthUser user;
+  final int feedRefreshVersion;
 
   @override
   Widget build(BuildContext context) {
-    return PostFeedScreen(user: user);
+    return PostFeedScreen(key: ValueKey(feedRefreshVersion), user: user);
   }
 }
 

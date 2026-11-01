@@ -25,4 +25,35 @@ class PostsRepository {
       return Post.fromJson(Map<String, dynamic>.from(item));
     }).toList();
   }
+
+  Future<Post> createPublicPost({
+    required String content,
+    required String token,
+  }) async {
+    final normalizedContent = content.trim();
+
+    if (normalizedContent.isEmpty) {
+      throw const ApiException('متن پست الزامی است.');
+    }
+
+    if (normalizedContent.length > 10000) {
+      throw const ApiException(
+        'متن پست نمی‌تواند بیشتر از ۱۰۰۰۰ کاراکتر باشد.',
+      );
+    }
+
+    final response = await _apiClient.post(
+      '/posts',
+      token: token,
+      body: {'content': normalizedContent},
+    );
+
+    final data = response['data'];
+
+    if (data is! Map) {
+      throw const ApiException('ساختار پاسخ انتشار پست از سرور معتبر نیست.');
+    }
+
+    return Post.fromJson(Map<String, dynamic>.from(data));
+  }
 }
