@@ -12,7 +12,7 @@ class PostCard extends StatefulWidget {
   });
 
   final Post post;
-  final ValueChanged<bool>? onLikeChanged;
+  final Future<void> Function(bool isLiked)? onLikeChanged;
   final VoidCallback? onCommentsTap;
   final VoidCallback? onShareTap;
 
@@ -21,33 +21,29 @@ class PostCard extends StatefulWidget {
 }
 
 class _PostCardState extends State<PostCard> {
-  late bool _isLiked;
-  late int _likeCount;
+  bool _isUpdatingLike = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _isLiked = widget.post.isLiked;
-    _likeCount = widget.post.likeCount;
-  }
+  Future<void> _toggleLike() async {
+    if (_isUpdatingLike || widget.onLikeChanged == null) return;
 
-  @override
-  void didUpdateWidget(covariant PostCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
+    setState(() => _isUpdatingLike = true);
 
-    if (oldWidget.post.id != widget.post.id) {
-      _isLiked = widget.post.isLiked;
-      _likeCount = widget.post.likeCount;
+    try {
+      await widget.onLikeChanged!(!widget.post.isLiked);
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تغییر وضعیت همدلی ناموفق بود: $error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isUpdatingLike = false);
+      }
     }
-  }
-
-  void _toggleLike() {
-    setState(() {
-      _isLiked = !_isLiked;
-      _likeCount += _isLiked ? 1 : -1;
-    });
-
-    widget.onLikeChanged?.call(_isLiked);
   }
 
   String _formatTime(DateTime date) {
@@ -73,6 +69,8 @@ class _PostCardState extends State<PostCard> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final author = widget.post.author;
+    final isLiked = widget.post.isLiked;
+    final likeCount = widget.post.likeCount;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -132,7 +130,7 @@ class _PostCardState extends State<PostCard> {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        '@${author.username}  ·  ${_formatTime(widget.post.createdAt)}',
+                        '@${author.username} · ${_formatTime(widget.post.createdAt)}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -163,21 +161,22 @@ class _PostCardState extends State<PostCard> {
               ),
             ),
           ),
-          if (widget.post.mediaUrl != null && widget.post.mediaUrl!.isNotEmpty)
+          if (widget.post.mediaUrl != null &&
+              widget.post.mediaUrl!.isNotEmpty)
             _PostMedia(url: widget.post.mediaUrl!),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
             child: Row(
               children: [
-                if (_likeCount > 0) ...[
+                if (likeCount > 0) ...[
                   Icon(
                     Icons.favorite_rounded,
                     size: 16,
-                    color: _isLiked ? colors.error : colors.primary,
+                    color: isLiked ? colors.error : colors.primary,
                   ),
                   const SizedBox(width: 5),
                   Text(
-                    '$_likeCount',
+                    '$likeCount',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: colors.onSurfaceVariant,
                       fontWeight: FontWeight.w600,
@@ -207,12 +206,14 @@ class _PostCardState extends State<PostCard> {
               children: [
                 Expanded(
                   child: _ActionButton(
-                    icon: _isLiked
+                    icon: _isUpdatingLike
+                        ? Icons.hourglass_top_rounded
+                        : isLiked
                         ? Icons.favorite_rounded
                         : Icons.favorite_border_rounded,
-                    label: 'همدلی',
-                    color: _isLiked ? colors.error : null,
-                    onTap: _toggleLike,
+                    label: _isUpdatingLike ? 'در حال ثبت...' : 'همدلی',
+                    color: isLiked ? colors.error : null,
+                    onTap: _isUpdatingLike ? null : _toggleLike,
                   ),
                 ),
                 Expanded(
@@ -247,6 +248,7 @@ class _AuthorAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final hasAvatar = avatarUrl != null && avatarUrl!.isNotEmpty;
 
     return Container(
       padding: const EdgeInsets.all(2),
@@ -260,10 +262,8 @@ class _AuthorAvatar extends StatelessWidget {
       child: CircleAvatar(
         radius: 22,
         backgroundColor: colors.primaryContainer,
-        backgroundImage: avatarUrl != null && avatarUrl!.isNotEmpty
-            ? NetworkImage(avatarUrl!)
-            : null,
-        child: avatarUrl == null || avatarUrl!.isEmpty
+        backgroundImage: hasAvatar ? NetworkImage(avatarUrl!) : null,
+        child: !hasAvatar
             ? Text(
                 displayName.isNotEmpty ? displayName[0] : '؟',
                 style: TextStyle(

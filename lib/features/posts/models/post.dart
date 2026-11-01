@@ -45,14 +45,17 @@ class Post {
       throw const FormatException('تاریخ انتشار پست قابل پردازش نیست.');
     }
 
+    final mediaUrl = json['media_url'];
+
     return Post(
       id: json['id'].toString(),
       author: PostAuthor.fromJson(Map<String, dynamic>.from(authorJson)),
       content: json['content'] is String ? json['content'] as String : '',
       createdAt: parsedDate.toLocal(),
+      mediaUrl: mediaUrl is String ? mediaUrl : null,
       likeCount: _readInt(json['likes_count']),
       commentCount: _readInt(json['comments_count']),
-      isLiked: false,
+      isLiked: json['is_liked'] == true,
     );
   }
 

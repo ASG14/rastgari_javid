@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
 
+import '../../../auth/data/auth_repository.dart';
 import '../../../auth/models/auth_user.dart';
 import '../../data/posts_repository.dart';
 import '../../models/post.dart';
 import '../widgets/post_card.dart';
 
 class PostFeedScreen extends StatefulWidget {
-  const PostFeedScreen({super.key, required this.user});
+  const PostFeedScreen({
+    super.key,
+    required this.user,
+    required this.authRepository,
+  });
 
   final AuthUser user;
+  final AuthRepository authRepository;
 
   @override
   State<PostFeedScreen> createState() => _PostFeedScreenState();
@@ -34,7 +40,8 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
     });
 
     try {
-      final posts = await _postsRepository.getPublicPosts();
+      final token = await widget.authRepository.readAccessToken();
+      final posts = await _postsRepository.getPublicPosts(token: token);
 
       if (!mounted) return;
 
@@ -50,6 +57,49 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  Future<void> _handleLikeChanged(Post post, bool isLiked) async {
+    final token = await widget.authRepository.readAccessToken();
+
+    if (token == null || token.isEmpty) {
+      throw Exception('برای ثبت همدلی باید وارد حساب کاربری شوید.');
+    }
+
+    final result = await _postsRepository.setPostLike(
+      postId: post.id,
+      isLiked: isLiked,
+      token: token,
+    );
+
+    final serverPostId = result['post_id']?.toString();
+    final serverIsLiked = result['is_liked'];
+    final serverLikeCount = result['likes_count'];
+
+    if (serverIsLiked is! bool || serverLikeCount is! num) {
+      throw const FormatException(
+        'پاسخ سرور برای به‌روزرسانی همدلی معتبر نیست.',
+      );
+    }
+
+    if (serverPostId != null && serverPostId != post.id) {
+      throw const FormatException(
+        'شناسه پست در پاسخ سرور با پست انتخاب‌شده مطابقت ندارد.',
+      );
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _posts = _posts.map((item) {
+        if (item.id != post.id) return item;
+
+        return item.copyWith(
+          isLiked: serverIsLiked,
+          likeCount: serverLikeCount.toInt(),
+        );
+      }).toList();
+    });
   }
 
   @override
@@ -107,6 +157,8 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
                 PostCard(
                   key: ValueKey(post.id),
                   post: post,
+                  onLikeChanged: (isLiked) =>
+                      _handleLikeChanged(post, isLiked),
                   onCommentsTap: () {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(

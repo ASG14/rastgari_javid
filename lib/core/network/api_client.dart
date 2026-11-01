@@ -32,6 +32,18 @@ class ApiClient {
     return _handleResponse(response);
   }
 
+  Future<Map<String, dynamic>> delete(
+    String path, {
+    String? token,
+  }) async {
+    final response = await _client.delete(
+      _buildUri(path),
+      headers: _headers(token: token),
+    );
+
+    return _handleResponse(response);
+  }
+
   Uri _buildUri(String path) {
     final normalizedPath = path.startsWith('/') ? path : '/$path';
 

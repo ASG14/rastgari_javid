@@ -4,7 +4,6 @@ import 'core/network/api_client.dart';
 import 'features/auth/data/auth_repository.dart';
 import 'features/auth/models/auth_user.dart';
 import 'features/auth/presentation/screens/login_screen.dart';
-import 'features/home/presentation/screens/home_screen.dart';
 import 'app/app_shell.dart';
 
 void main() {

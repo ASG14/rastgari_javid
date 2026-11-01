@@ -75,7 +75,11 @@ class _HomeScreenState extends State<HomeScreen> {
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          _HomeTab(user: widget.user, feedRefreshVersion: _feedRefreshVersion),
+          _HomeTab(
+            user: widget.user,
+            authRepository: widget.authRepository,
+            feedRefreshVersion: _feedRefreshVersion,
+          ),
           const _PlaceholderTab(
             icon: Icons.chat_bubble_outline,
             title: 'گفتگوها',
@@ -108,14 +112,23 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _HomeTab extends StatelessWidget {
-  const _HomeTab({required this.user, required this.feedRefreshVersion});
+  const _HomeTab({
+    required this.user,
+    required this.authRepository,
+    required this.feedRefreshVersion,
+  });
 
   final AuthUser user;
+  final AuthRepository authRepository;
   final int feedRefreshVersion;
 
   @override
   Widget build(BuildContext context) {
-    return PostFeedScreen(key: ValueKey(feedRefreshVersion), user: user);
+    return PostFeedScreen(
+      key: ValueKey(feedRefreshVersion),
+      user: user,
+      authRepository: authRepository,
+    );
   }
 }
 

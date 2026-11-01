@@ -13,25 +13,7 @@ Future<Response> onRequest(RequestContext context) async {
   final method = context.request.method.value;
 
   if (method == 'GET') {
-    try {
-      final posts = await postService.getPublicPosts();
-
-      return Response.json(
-        body: {'data': posts},
-      );
-    } catch (error, stackTrace) {
-      developer.log(
-        'Failed to fetch posts',
-        error: error,
-        stackTrace: stackTrace,
-        name: 'posts',
-      );
-
-      return Response.json(
-        statusCode: 500,
-        body: {'error': 'دریافت پست‌ها با خطا مواجه شد.'},
-      );
-    }
+    return _getPosts(context);
   }
 
   if (method == 'POST') {
@@ -42,6 +24,59 @@ Future<Response> onRequest(RequestContext context) async {
     statusCode: 405,
     body: {'error': 'این متد پشتیبانی نمی‌شود.'},
   );
+}
+
+Future<Response> _getPosts(RequestContext context) async {
+  try {
+    int? currentUserId;
+    final authorization = context.request.headers['authorization'];
+
+    if (authorization != null && authorization.isNotEmpty) {
+      final parts = authorization.split(RegExp(r'\s+'));
+
+      if (parts.length != 2 ||
+          parts[0].toLowerCase() != 'bearer' ||
+          parts[1].isEmpty) {
+        return Response.json(
+          statusCode: 401,
+          body: {'error': 'فرمت توکن ورود معتبر نیست.'},
+        );
+      }
+
+      final user = await authService.getCurrentUser(parts[1]);
+      currentUserId = int.tryParse(user['id']?.toString() ?? '');
+
+      if (currentUserId == null) {
+        return Response.json(
+          statusCode: 401,
+          body: {'error': 'اطلاعات حساب کاربری معتبر نیست.'},
+        );
+      }
+    }
+
+    final posts = await postService.getPublicPosts(
+      currentUserId: currentUserId,
+    );
+
+    return Response.json(body: {'data': posts});
+  } on AuthException catch (error) {
+    return Response.json(
+      statusCode: error.statusCode,
+      body: {'error': error.message},
+    );
+  } catch (error, stackTrace) {
+    developer.log(
+      'Failed to fetch posts',
+      error: error,
+      stackTrace: stackTrace,
+      name: 'posts',
+    );
+
+    return Response.json(
+      statusCode: 500,
+      body: {'error': 'دریافت پست‌ها با خطا مواجه شد.'},
+    );
+  }
 }
 
 Future<Response> _createPost(RequestContext context) async {

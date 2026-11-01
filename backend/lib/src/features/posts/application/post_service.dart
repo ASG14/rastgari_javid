@@ -7,9 +7,13 @@ class PostService {
 
   final PostRepository _postRepository;
 
-  /// Returns the latest public posts.
-  Future<List<Map<String, dynamic>>> getPublicPosts() {
-    return _postRepository.getPublicPosts();
+  /// Returns the latest public posts and optional user-specific state.
+  Future<List<Map<String, dynamic>>> getPublicPosts({
+    int? currentUserId,
+  }) {
+    return _postRepository.getPublicPosts(
+      currentUserId: currentUserId,
+    );
   }
 
   /// Publishes a public post for the authenticated user.
@@ -32,6 +36,23 @@ class PostService {
     return _postRepository.createPublicPost(
       userId: userId,
       content: normalizedContent,
+    );
+  }
+
+  /// Sets the like state for an authenticated user.
+  Future<Map<String, dynamic>?> setPostLike({
+    required int postId,
+    required int userId,
+    required bool isLiked,
+  }) {
+    if (postId < 1 || userId < 1) {
+      throw const PostException('شناسه پست یا کاربر معتبر نیست.');
+    }
+
+    return _postRepository.setPostLike(
+      postId: postId,
+      userId: userId,
+      isLiked: isLiked,
     );
   }
 }

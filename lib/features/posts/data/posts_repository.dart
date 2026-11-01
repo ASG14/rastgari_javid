@@ -7,8 +7,8 @@ class PostsRepository {
 
   final ApiClient _apiClient;
 
-  Future<List<Post>> getPublicPosts() async {
-    final response = await _apiClient.get('/posts');
+  Future<List<Post>> getPublicPosts({String? token}) async {
+    final response = await _apiClient.get('/posts', token: token);
     final data = response['data'];
 
     if (data is! List) {
@@ -55,5 +55,27 @@ class PostsRepository {
     }
 
     return Post.fromJson(Map<String, dynamic>.from(data));
+  }
+
+  Future<Map<String, dynamic>> setPostLike({
+    required String postId,
+    required bool isLiked,
+    required String token,
+  }) async {
+    final path = '/posts/${Uri.encodeComponent(postId)}/like';
+
+    final response = isLiked
+        ? await _apiClient.post(path, token: token)
+        : await _apiClient.delete(path, token: token);
+
+    final data = response['data'];
+
+    if (data is! Map) {
+      throw const ApiException(
+        'ساختار پاسخ تغییر وضعیت همدلی معتبر نیست.',
+      );
+    }
+
+    return Map<String, dynamic>.from(data);
   }
 }

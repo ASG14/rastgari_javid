@@ -1,36 +1,51 @@
 import 'package:backend/src/core/database/database_pool.dart';
 import 'package:postgres/postgres.dart';
 
-/// Provides database operations for posts.
+/// Provides database operations for posts and post interactions.
 class PostRepository {
-  /// Retrieves the latest public posts and their author and statistics.
-  Future<List<Map<String, dynamic>>> getPublicPosts() async {
-    final result = await database.execute('''
-      SELECT
-        p.id AS post_id,
-        p.content,
-        p.visibility,
-        p.published_at,
-        p.created_at,
-        u.id AS author_id,
-        u.username,
-        u.display_name,
-        u.avatar_storage_key,
-        COALESCE(s.likes_count, 0) AS likes_count,
-        COALESCE(s.comments_count, 0) AS comments_count,
-        COALESCE(s.reposts_count, 0) AS reposts_count
-      FROM posts AS p
-      JOIN users AS u ON u.id = p.user_id
-      LEFT JOIN post_stats AS s ON s.post_id = p.id
-      WHERE
-        p.status = 'published'
-        AND p.visibility = 'public'
-        AND p.deleted_at IS NULL
-        AND u.deleted_at IS NULL
-        AND u.status = 'active'
-      ORDER BY p.published_at DESC NULLS LAST, p.id DESC
-      LIMIT 50
-    ''');
+  /// Retrieves the latest public posts and their author, statistics,
+  /// and optional current-user like state.
+  Future<List<Map<String, dynamic>>> getPublicPosts({
+    int? currentUserId,
+  }) async {
+    final result = await database.execute(
+      Sql.named('''
+        SELECT
+          p.id AS post_id,
+          p.content,
+          p.visibility,
+          p.published_at,
+          p.created_at,
+          u.id AS author_id,
+          u.username,
+          u.display_name,
+          u.avatar_storage_key,
+          COALESCE(s.likes_count, 0) AS likes_count,
+          COALESCE(s.comments_count, 0) AS comments_count,
+          COALESCE(s.reposts_count, 0) AS reposts_count,
+          CASE
+            WHEN CAST(@currentUserId AS BIGINT) IS NULL THEN FALSE
+            ELSE EXISTS (
+              SELECT 1
+              FROM public.post_likes AS pl
+              WHERE pl.post_id = p.id
+                AND pl.user_id = CAST(@currentUserId AS BIGINT)
+            )
+          END AS is_liked
+        FROM public.posts AS p
+        JOIN public.users AS u ON u.id = p.user_id
+        LEFT JOIN public.post_stats AS s ON s.post_id = p.id
+        WHERE
+          p.status = 'published'
+          AND p.visibility = 'public'
+          AND p.deleted_at IS NULL
+          AND u.deleted_at IS NULL
+          AND u.status = 'active'
+        ORDER BY p.published_at DESC NULLS LAST, p.id DESC
+        LIMIT 50
+      '''),
+      parameters: {'currentUserId': currentUserId},
+    );
 
     return result.map((row) {
       return _mapPost(row.toColumnMap());
@@ -85,7 +100,8 @@ class PostRepository {
           u.avatar_storage_key,
           COALESCE(s.likes_count, 0) AS likes_count,
           COALESCE(s.comments_count, 0) AS comments_count,
-          COALESCE(s.reposts_count, 0) AS reposts_count
+          COALESCE(s.reposts_count, 0) AS reposts_count,
+          FALSE AS is_liked
         FROM new_post AS p
         JOIN new_stats AS ns ON ns.post_id = p.id
         JOIN public.users AS u ON u.id = p.user_id
@@ -104,6 +120,136 @@ class PostRepository {
     return _mapPost(result.first.toColumnMap());
   }
 
+  /// Adds or removes a user's like and returns the resulting state.
+  ///
+  /// Returns null when the post is not available for public interaction.
+  Future<Map<String, dynamic>?> setPostLike({
+    required int postId,
+    required int userId,
+    required bool isLiked,
+  }) {
+    return database.runTx((session) async {
+      final postResult = await session.execute(
+        Sql.named('''
+          SELECT p.id
+          FROM public.posts AS p
+          JOIN public.users AS u ON u.id = p.user_id
+          WHERE p.id = @postId
+            AND p.status = 'published'
+            AND p.visibility = 'public'
+            AND p.deleted_at IS NULL
+            AND u.status = 'active'
+            AND u.deleted_at IS NULL
+          LIMIT 1
+        '''),
+        parameters: {'postId': postId},
+      );
+
+      if (postResult.isEmpty) {
+        return null;
+      }
+
+      if (isLiked) {
+        final insertResult = await session.execute(
+          Sql.named('''
+            INSERT INTO public.post_likes (post_id, user_id)
+            VALUES (@postId, @userId)
+            ON CONFLICT (post_id, user_id) DO NOTHING
+            RETURNING post_id
+          '''),
+          parameters: {
+            'postId': postId,
+            'userId': userId,
+          },
+        );
+
+        // Only increment the counter when a new like was inserted.
+        if (insertResult.isNotEmpty) {
+          await session.execute(
+            Sql.named('''
+              INSERT INTO public.post_stats (
+                post_id,
+                likes_count,
+                updated_at
+              )
+              VALUES (@postId, 1, CURRENT_TIMESTAMP)
+              ON CONFLICT (post_id) DO UPDATE
+              SET likes_count = public.post_stats.likes_count + 1,
+                  updated_at = CURRENT_TIMESTAMP
+            '''),
+            parameters: {'postId': postId},
+          );
+        }
+      } else {
+        final deleteResult = await session.execute(
+          Sql.named('''
+            DELETE FROM public.post_likes
+            WHERE post_id = @postId
+              AND user_id = @userId
+            RETURNING post_id
+          '''),
+          parameters: {
+            'postId': postId,
+            'userId': userId,
+          },
+        );
+
+        // Only decrement when an existing like was actually removed.
+        if (deleteResult.isNotEmpty) {
+          await session.execute(
+            Sql.named('''
+              INSERT INTO public.post_stats (
+                post_id,
+                likes_count,
+                updated_at
+              )
+              VALUES (@postId, 0, CURRENT_TIMESTAMP)
+              ON CONFLICT (post_id) DO UPDATE
+              SET likes_count = GREATEST(
+                    public.post_stats.likes_count - 1,
+                    0
+                  ),
+                  updated_at = CURRENT_TIMESTAMP
+            '''),
+            parameters: {'postId': postId},
+          );
+        }
+      }
+
+      final stateResult = await session.execute(
+        Sql.named('''
+          SELECT
+            EXISTS (
+              SELECT 1
+              FROM public.post_likes
+              WHERE post_id = @postId
+                AND user_id = @userId
+            ) AS is_liked,
+            COALESCE(
+              (
+                SELECT likes_count
+                FROM public.post_stats
+                WHERE post_id = @postId
+              ),
+              0
+            ) AS likes_count
+        '''),
+        parameters: {
+          'postId': postId,
+          'userId': userId,
+        },
+      );
+
+      final state = stateResult.first.toColumnMap();
+
+      return {
+        'post_id': postId,
+        'is_liked': state['is_liked'] == true,
+        'likes_count': state['likes_count'],
+      };
+    });
+  }
+
   Map<String, dynamic> _mapPost(Map<String, dynamic> data) {
     return {
       'id': data['post_id'],
@@ -120,6 +266,7 @@ class PostRepository {
       'likes_count': data['likes_count'],
       'comments_count': data['comments_count'],
       'reposts_count': data['reposts_count'],
+      'is_liked': data['is_liked'] == true,
     };
   }
 }
