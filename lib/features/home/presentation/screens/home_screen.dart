@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import '../../../auth/data/auth_repository.dart';
@@ -64,9 +63,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _openNotifications() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => NotificationsScreen(
-          repository: _notificationRepository,
-        ),
+        builder: (_) =>
+            NotificationsScreen(repository: _notificationRepository),
       ),
     );
 
@@ -129,21 +127,12 @@ class _HomeScreenState extends State<HomeScreen> {
               top: -5,
               right: -7,
               child: Container(
-                constraints: const BoxConstraints(
-                  minWidth: 17,
-                  minHeight: 17,
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 4,
-                  vertical: 1,
-                ),
+                constraints: const BoxConstraints(minWidth: 17, minHeight: 17),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                 decoration: BoxDecoration(
                   color: colors.error,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: colors.surface,
-                    width: 1.5,
-                  ),
+                  border: Border.all(color: colors.surface, width: 1.5),
                 ),
                 alignment: Alignment.center,
                 child: Text(

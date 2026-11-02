@@ -19,12 +19,24 @@ class NotificationRepository {
           n.comment_id,
           n.created_at,
           n.read_at,
+          LEFT(
+            CASE
+              WHEN n.notification_type = 'post_like'
+                THEN p.content
+              ELSE c.content
+            END,
+            140
+          ) AS content_preview,
           actor.id AS actor_id,
           actor.username AS actor_username,
           actor.display_name AS actor_display_name
         FROM public.notifications AS n
         LEFT JOIN public.users AS actor
           ON actor.id = n.actor_user_id
+        LEFT JOIN public.posts AS p
+          ON p.id = n.post_id
+        LEFT JOIN public.comments AS c
+          ON c.id = n.comment_id
         WHERE n.recipient_user_id = @userId
         ORDER BY n.created_at DESC, n.id DESC
         LIMIT @limit
@@ -45,6 +57,7 @@ class NotificationRepository {
         'comment_id': data['comment_id'],
         'created_at': data['created_at']?.toString(),
         'read_at': data['read_at']?.toString(),
+        'content_preview': data['content_preview'],
         'actor': data['actor_id'] == null
             ? null
             : {
@@ -77,6 +90,24 @@ class NotificationRepository {
     return int.parse(count.toString());
   }
 
+  /// Marks all unread notifications belonging to a user as read.
+  ///
+  /// Returns the number of notifications that were updated.
+  Future<int> markAllAsRead({required int userId}) async {
+    final result = await database.execute(
+      Sql.named('''
+        UPDATE public.notifications
+        SET read_at = CURRENT_TIMESTAMP
+        WHERE recipient_user_id = @userId
+          AND read_at IS NULL
+        RETURNING id
+      '''),
+      parameters: {'userId': userId},
+    );
+
+    return result.length;
+  }
+
   /// Marks one of the user's notifications as read.
   ///
   /// Returns false if the notification does not belong to the user
@@ -102,7 +133,6 @@ class NotificationRepository {
 
     if (result.isNotEmpty) return true;
 
-    // An already-read notification is also a successful outcome.
     final existing = await database.execute(
       Sql.named('''
         SELECT id

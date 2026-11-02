@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -47,10 +46,7 @@ class ApiClient {
     return _handleResponse(response);
   }
 
-  Future<Map<String, dynamic>> delete(
-    String path, {
-    String? token,
-  }) async {
+  Future<Map<String, dynamic>> delete(String path, {String? token}) async {
     final response = await _client.delete(
       _buildUri(path),
       headers: _headers(token: token),

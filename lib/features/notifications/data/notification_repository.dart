@@ -1,20 +1,22 @@
-
 import '../../../core/network/api_client.dart';
 import '../../../core/storage/token_storage.dart';
 
 class NotificationRepository {
-  NotificationRepository({
-    ApiClient? apiClient,
-    TokenStorage? tokenStorage,
-  }) : _apiClient = apiClient ?? ApiClient(),
-       _tokenStorage = tokenStorage ?? TokenStorage();
+  NotificationRepository({ApiClient? apiClient, TokenStorage? tokenStorage})
+    : _apiClient = apiClient ?? ApiClient(),
+      _tokenStorage = tokenStorage ?? TokenStorage();
 
   final ApiClient _apiClient;
   final TokenStorage _tokenStorage;
 
-  Future<List<Map<String, dynamic>>> getNotifications({
-    int limit = 50,
-  }) async {
+  /// دریافت فهرست اعلان‌های کاربر.
+  Future<List<Map<String, dynamic>>> getNotifications({int limit = 50}) async {
+    if (limit < 1 || limit > 100) {
+      throw const ApiException(
+        'تعداد اعلان‌های درخواستی باید بین ۱ تا ۱۰۰ باشد.',
+      );
+    }
+
     final token = await _requireToken();
 
     final response = await _apiClient.get(
@@ -37,6 +39,7 @@ class NotificationRepository {
     }).toList();
   }
 
+  /// دریافت تعداد اعلان‌های خوانده‌نشده.
   Future<int> getUnreadCount() async {
     final token = await _tokenStorage.readToken();
 
@@ -51,7 +54,7 @@ class NotificationRepository {
 
     final data = response['data'];
 
-    if (data is! Map<String, dynamic>) {
+    if (data is! Map) {
       throw const ApiException(
         'ساختار پاسخ تعداد اعلان‌های خوانده‌نشده نامعتبر است.',
       );
@@ -68,13 +71,18 @@ class NotificationRepository {
     );
   }
 
+  /// علامت‌گذاری یک اعلان به‌عنوان خوانده‌شده.
   Future<void> markAsRead(String notificationId) async {
     final token = await _requireToken();
 
-    await _apiClient.patch(
-      '/notifications/$notificationId/read',
-      token: token,
-    );
+    await _apiClient.patch('/notifications/$notificationId/read', token: token);
+  }
+
+  /// علامت‌گذاری تمام اعلان‌های کاربر به‌عنوان خوانده‌شده.
+  Future<void> markAllAsRead() async {
+    final token = await _requireToken();
+
+    await _apiClient.patch('/notifications/read-all', token: token);
   }
 
   Future<String> _requireToken() async {

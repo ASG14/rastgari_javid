@@ -34,6 +34,13 @@ class NotificationService {
     return _repository.getUnreadCount(userId: userId);
   }
 
+  /// Marks all unread notifications belonging to a user as read.
+  Future<int> markAllAsRead({required int userId}) {
+    _validateUserId(userId);
+
+    return _repository.markAllAsRead(userId: userId);
+  }
+
   /// Marks a notification as read if it belongs to the specified user.
   ///
   /// Returns false if the notification does not exist or belongs to
