@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../auth/models/auth_user.dart';
 import '../../../auth/presentation/screens/login_screen.dart';
+import '../../../notifications/data/notification_repository.dart';
+import '../../../notifications/presentation/screens/notifications_screen.dart';
 import '../../../posts/models/post.dart';
 import '../../../posts/presentation/screens/create_post_screen.dart';
 import '../../../posts/presentation/screens/post_feed_screen.dart';
@@ -23,9 +25,53 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final NotificationRepository _notificationRepository =
+      NotificationRepository();
+
   int _currentIndex = 0;
   int _feedRefreshVersion = 0;
+  int _unreadNotificationCount = 0;
   bool _isLoggingOut = false;
+  bool _isLoadingUnreadCount = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshUnreadNotificationCount();
+  }
+
+  Future<void> _refreshUnreadNotificationCount() async {
+    if (_isLoadingUnreadCount) return;
+
+    _isLoadingUnreadCount = true;
+
+    try {
+      final count = await _notificationRepository.getUnreadCount();
+
+      if (!mounted) return;
+
+      setState(() {
+        _unreadNotificationCount = count;
+      });
+    } catch (_) {
+      // A badge failure should not prevent the home screen from working.
+    } finally {
+      _isLoadingUnreadCount = false;
+    }
+  }
+
+  Future<void> _openNotifications() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            NotificationsScreen(repository: _notificationRepository),
+      ),
+    );
+
+    if (mounted) {
+      await _refreshUnreadNotificationCount();
+    }
+  }
 
   Future<void> _logout() async {
     setState(() => _isLoggingOut = true);
@@ -66,12 +112,58 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildNotificationButton() {
+    final colors = Theme.of(context).colorScheme;
+
+    return IconButton(
+      tooltip: 'اعلان‌ها',
+      onPressed: _openNotifications,
+      icon: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          const Icon(Icons.notifications_none_rounded, size: 27),
+          if (_unreadNotificationCount > 0)
+            Positioned(
+              top: -5,
+              right: -7,
+              child: Container(
+                constraints: const BoxConstraints(minWidth: 17, minHeight: 17),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: colors.error,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: colors.surface, width: 1.5),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  _unreadNotificationCount > 99
+                      ? '99+'
+                      : '$_unreadNotificationCount',
+                  style: TextStyle(
+                    color: colors.onError,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final titles = ['خانه', 'گفتگوها', 'افزودن پست', 'رویدادها', 'پروفایل من'];
 
     return Scaffold(
-      appBar: AppBar(title: Text(titles[_currentIndex])),
+      appBar: AppBar(
+        title: Text(titles[_currentIndex]),
+        actions: [
+          if (_currentIndex == 0) _buildNotificationButton(),
+          const SizedBox(width: 4),
+        ],
+      ),
       body: IndexedStack(
         index: _currentIndex,
         children: [
@@ -105,6 +197,10 @@ class _HomeScreenState extends State<HomeScreen> {
         currentIndex: _currentIndex,
         onDestinationSelected: (index) {
           setState(() => _currentIndex = index);
+
+          if (index == 0) {
+            _refreshUnreadNotificationCount();
+          }
         },
       ),
     );

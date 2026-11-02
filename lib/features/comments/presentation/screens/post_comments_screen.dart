@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import '../../../auth/data/auth_repository.dart';
@@ -58,9 +57,7 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
       final token = await widget.authRepository.readAccessToken();
 
       if (token == null || token.isEmpty) {
-        throw Exception(
-          'برای مشاهده گفتگوها باید وارد حساب کاربری شوید.',
-        );
+        throw Exception('برای مشاهده گفتگوها باید وارد حساب کاربری شوید.');
       }
 
       final comments = await _repository.getPostComments(
@@ -124,9 +121,7 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
 
       _focusNode.unfocus();
       _showMessage(
-        parentComment == null
-            ? 'دیدگاه شما ثبت شد.'
-            : 'پاسخ شما ثبت شد.',
+        parentComment == null ? 'دیدگاه شما ثبت شد.' : 'پاسخ شما ثبت شد.',
       );
     } catch (error) {
       if (!mounted) return;
@@ -148,9 +143,7 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
       return;
     }
 
-    var insertIndex = _comments.indexWhere(
-      (item) => item.id == parentId,
-    );
+    var insertIndex = _comments.indexWhere((item) => item.id == parentId);
 
     if (insertIndex == -1) {
       _comments = [..._comments, comment];
@@ -170,9 +163,7 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
   }
 
   void _startReply(Comment comment) {
-    final target = comment.isReply
-        ? _findParentComment(comment)
-        : comment;
+    final target = comment.isReply ? _findParentComment(comment) : comment;
 
     if (target == null) {
       _showMessage('دیدگاه اصلی برای پاسخ دادن پیدا نشد.');
@@ -384,9 +375,7 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
       );
     }
 
-    final commentsById = {
-      for (final comment in _comments) comment.id: comment,
-    };
+    final commentsById = {for (final comment in _comments) comment.id: comment};
 
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
@@ -399,9 +388,7 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
             : commentsById[comment.parentCommentId];
 
         return Padding(
-          padding: EdgeInsetsDirectional.only(
-            start: comment.isReply ? 22 : 0,
-          ),
+          padding: EdgeInsetsDirectional.only(start: comment.isReply ? 22 : 0),
           child: CommentCard(
             key: ValueKey(comment.id),
             comment: comment,
@@ -426,9 +413,7 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
         decoration: BoxDecoration(
           color: colors.surface,
-          border: Border(
-            top: BorderSide(color: colors.outlineVariant),
-          ),
+          border: Border(top: BorderSide(color: colors.outlineVariant)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -436,11 +421,7 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
             if (replyingTo != null) ...[
               Row(
                 children: [
-                  Icon(
-                    Icons.reply_rounded,
-                    size: 18,
-                    color: colors.primary,
-                  ),
+                  Icon(Icons.reply_rounded, size: 18, color: colors.primary),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
@@ -482,15 +463,11 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
                       fillColor: colors.surfaceContainerLow,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide(
-                          color: colors.outlineVariant,
-                        ),
+                        borderSide: BorderSide(color: colors.outlineVariant),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide(
-                          color: colors.outlineVariant,
-                        ),
+                        borderSide: BorderSide(color: colors.outlineVariant),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
@@ -511,16 +488,12 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
                   padding: const EdgeInsets.only(bottom: 4),
                   child: IconButton.filled(
                     onPressed: _isSubmitting ? null : _submitComment,
-                    tooltip: replyingTo == null
-                        ? 'ثبت دیدگاه'
-                        : 'ثبت پاسخ',
+                    tooltip: replyingTo == null ? 'ثبت دیدگاه' : 'ثبت پاسخ',
                     icon: _isSubmitting
                         ? const SizedBox(
                             width: 20,
                             height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                            ),
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.send_rounded),
                   ),

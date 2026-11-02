@@ -101,7 +101,9 @@ class CommentRepository {
     return database.runTx((session) async {
       final postResult = await session.execute(
         Sql.named('''
-          SELECT p.id
+          SELECT
+            p.id,
+            p.user_id AS post_author_id
           FROM public.posts AS p
           JOIN public.users AS u ON u.id = p.user_id
           WHERE p.id = @postId
@@ -116,6 +118,11 @@ class CommentRepository {
       );
 
       if (postResult.isEmpty) return null;
+
+      final postAuthorId =
+          postResult.first.toColumnMap()['post_author_id'] as int;
+
+      var notificationRecipientId = postAuthorId;
 
       final userResult = await session.execute(
         Sql.named('''
@@ -134,7 +141,9 @@ class CommentRepository {
       if (parentCommentId != null) {
         final parentResult = await session.execute(
           Sql.named('''
-            SELECT c.id
+            SELECT
+              c.id,
+              c.user_id AS parent_author_id
             FROM public.comments AS c
             JOIN public.users AS u ON u.id = c.user_id
             WHERE c.id = @parentCommentId
@@ -152,6 +161,9 @@ class CommentRepository {
         );
 
         if (parentResult.isEmpty) return null;
+
+        notificationRecipientId =
+            parentResult.first.toColumnMap()['parent_author_id'] as int;
       }
 
       final inserted = await session.execute(
@@ -211,6 +223,36 @@ class CommentRepository {
         '''),
         parameters: {'postId': postId},
       );
+
+      if (notificationRecipientId != userId) {
+        await session.execute(
+          Sql.named('''
+            INSERT INTO public.notifications (
+              recipient_user_id,
+              actor_user_id,
+              notification_type,
+              post_id,
+              comment_id
+            )
+            VALUES (
+              @recipientUserId,
+              @actorUserId,
+              @notificationType,
+              @postId,
+              @commentId
+            )
+          '''),
+          parameters: {
+            'recipientUserId': notificationRecipientId,
+            'actorUserId': userId,
+            'notificationType': parentCommentId == null
+                ? 'post_comment'
+                : 'comment_reply',
+            'postId': postId,
+            'commentId': row['id'],
+          },
+        );
+      }
 
       return {
         'id': row['id'],

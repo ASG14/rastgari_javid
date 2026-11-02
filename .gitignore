@@ -19,3 +19,5 @@ Thumbs.db
 
 # Android local configuration
 android/local.properties
+# Widget Preview related
+.widget_preview/
