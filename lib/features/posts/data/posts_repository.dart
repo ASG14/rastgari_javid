@@ -71,9 +71,7 @@ class PostsRepository {
     final data = response['data'];
 
     if (data is! Map) {
-      throw const ApiException(
-        'ساختار پاسخ تغییر وضعیت همدلی معتبر نیست.',
-      );
+      throw const ApiException('ساختار پاسخ تغییر وضعیت همدلی معتبر نیست.');
     }
 
     return Map<String, dynamic>.from(data);

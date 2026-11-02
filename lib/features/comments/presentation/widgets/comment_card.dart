@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import '../../models/comment.dart';
@@ -48,9 +47,7 @@ class CommentCard extends StatelessWidget {
                 radius: 20,
                 backgroundColor: colors.primaryContainer,
                 child: Text(
-                  author.displayName.isNotEmpty
-                      ? author.displayName[0]
-                      : '؟',
+                  author.displayName.isNotEmpty ? author.displayName[0] : '؟',
                   style: TextStyle(
                     color: colors.onPrimaryContainer,
                     fontWeight: FontWeight.w800,
@@ -112,9 +109,7 @@ class CommentCard extends StatelessWidget {
             child: TextButton.icon(
               onPressed: onReply,
               icon: Icon(
-                isReplying
-                    ? Icons.edit_note_rounded
-                    : Icons.reply_rounded,
+                isReplying ? Icons.edit_note_rounded : Icons.reply_rounded,
                 size: 18,
               ),
               label: Text(isReplying ? 'در حال پاسخ' : 'پاسخ'),

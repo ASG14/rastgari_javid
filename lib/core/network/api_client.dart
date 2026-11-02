@@ -1,3 +1,4 @@
+
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -24,6 +25,20 @@ class ApiClient {
     String? token,
   }) async {
     final response = await _client.post(
+      _buildUri(path),
+      headers: _headers(token: token),
+      body: jsonEncode(body ?? <String, dynamic>{}),
+    );
+
+    return _handleResponse(response);
+  }
+
+  Future<Map<String, dynamic>> patch(
+    String path, {
+    Map<String, dynamic>? body,
+    String? token,
+  }) async {
+    final response = await _client.patch(
       _buildUri(path),
       headers: _headers(token: token),
       body: jsonEncode(body ?? <String, dynamic>{}),

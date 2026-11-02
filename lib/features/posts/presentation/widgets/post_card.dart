@@ -161,8 +161,7 @@ class _PostCardState extends State<PostCard> {
               ),
             ),
           ),
-          if (widget.post.mediaUrl != null &&
-              widget.post.mediaUrl!.isNotEmpty)
+          if (widget.post.mediaUrl != null && widget.post.mediaUrl!.isNotEmpty)
             _PostMedia(url: widget.post.mediaUrl!),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),

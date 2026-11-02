@@ -131,7 +131,9 @@ class PostRepository {
     return database.runTx((session) async {
       final postResult = await session.execute(
         Sql.named('''
-          SELECT p.id
+          SELECT
+            p.id,
+            p.user_id AS author_id
           FROM public.posts AS p
           JOIN public.users AS u ON u.id = p.user_id
           WHERE p.id = @postId
@@ -164,21 +166,49 @@ class PostRepository {
         );
 
         // Only increment the counter when a new like was inserted.
+        // Only increment the counter when a new like was inserted.
         if (insertResult.isNotEmpty) {
           await session.execute(
             Sql.named('''
-              INSERT INTO public.post_stats (
-                post_id,
-                likes_count,
-                updated_at
-              )
-              VALUES (@postId, 1, CURRENT_TIMESTAMP)
-              ON CONFLICT (post_id) DO UPDATE
-              SET likes_count = public.post_stats.likes_count + 1,
-                  updated_at = CURRENT_TIMESTAMP
-            '''),
+      INSERT INTO public.post_stats (
+        post_id,
+        likes_count,
+        updated_at
+      )
+      VALUES (@postId, 1, CURRENT_TIMESTAMP)
+      ON CONFLICT (post_id) DO UPDATE
+      SET likes_count = public.post_stats.likes_count + 1,
+          updated_at = CURRENT_TIMESTAMP
+    '''),
             parameters: {'postId': postId},
           );
+
+          final postAuthorId =
+              postResult.first.toColumnMap()['author_id'] as int;
+
+          if (postAuthorId != userId) {
+            await session.execute(
+              Sql.named('''
+        INSERT INTO public.notifications (
+          recipient_user_id,
+          actor_user_id,
+          notification_type,
+          post_id
+        )
+        VALUES (
+          @recipientUserId,
+          @actorUserId,
+          'post_like',
+          @postId
+        )
+      '''),
+              parameters: {
+                'recipientUserId': postAuthorId,
+                'actorUserId': userId,
+                'postId': postId,
+              },
+            );
+          }
         }
       } else {
         final deleteResult = await session.execute(
