@@ -146,6 +146,8 @@ class AuthService {
       'username': user['username'],
       'display_name': user['display_name'],
       'email': user['email'],
+      'bio': user['bio'],
+      'avatar_storage_key': user['avatar_storage_key'],
       if (user['created_at'] != null)
         'created_at': user['created_at'].toString(),
     };

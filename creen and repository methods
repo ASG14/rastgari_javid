@@ -1,0 +1,201 @@
+[1mdiff --git a/backend/lib/src/features/auth/application/auth_service.dart b/backend/lib/src/features/auth/application/auth_service.dart[m
+[1mindex 3782090..1b11ebe 100644[m
+[1m--- a/backend/lib/src/features/auth/application/auth_service.dart[m
+[1m+++ b/backend/lib/src/features/auth/application/auth_service.dart[m
+[36m@@ -146,6 +146,8 @@[m [mclass AuthService {[m
+       'username': user['username'],[m
+       'display_name': user['display_name'],[m
+       'email': user['email'],[m
+[32m+[m[32m      'bio': user['bio'],[m
+[32m+[m[32m      'avatar_storage_key': user['avatar_storage_key'],[m
+       if (user['created_at'] != null)[m
+         'created_at': user['created_at'].toString(),[m
+     };[m
+[1mdiff --git a/backend/lib/src/features/auth/data/auth_repository.dart b/backend/lib/src/features/auth/data/auth_repository.dart[m
+[1mindex a22b8af..4309d4d 100644[m
+[1m--- a/backend/lib/src/features/auth/data/auth_repository.dart[m
+[1m+++ b/backend/lib/src/features/auth/data/auth_repository.dart[m
+[36m@@ -82,7 +82,14 @@[m [mclass AuthRepository {[m
+           @email,[m
+           @passwordHash[m
+         )[m
+[31m-        RETURNING id, username, display_name, email, created_at[m
+[32m+[m[32m        RETURNING[m
+[32m+[m[32m  id,[m
+[32m+[m[32m  username,[m
+[32m+[m[32m  display_name,[m
+[32m+[m[32m  email,[m
+[32m+[m[32m  bio,[m
+[32m+[m[32m  avatar_storage_key,[m
+[32m+[m[32m  created_at[m
+       '''),[m
+       parameters: {[m
+         'username': username,[m
+[36m@@ -112,18 +119,20 @@[m [mclass AuthRepository {[m
+   Future<Map<String, dynamic>?> findById(int userId) async {[m
+     final result = await database.execute([m
+       Sql.named('''[m
+[31m-      SELECT[m
+[31m-        id,[m
+[31m-        username,[m
+[31m-        display_name,[m
+[31m-        email,[m
+[31m-        created_at,[m
+[31m-        status[m
+[31m-      FROM public.users[m
+[31m-      WHERE id = @id[m
+[31m-        AND deleted_at IS NULL[m
+[31m-      LIMIT 1[m
+[31m-    '''),[m
+[32m+[m[32m        SELECT[m
+[32m+[m[32m  id,[m
+[32m+[m[32m  username,[m
+[32m+[m[32m  display_name,[m
+[32m+[m[32m  email,[m
+[32m+[m[32m  bio,[m
+[32m+[m[32m  avatar_storage_key,[m
+[32m+[m[32m  created_at,[m
+[32m+[m[32m  status[m
+[32m+[m[32mFROM public.users[m
+[32m+[m[32mWHERE id = @id[m
+[32m+[m[32m  AND deleted_at IS NULL[m
+[32m+[m[32mLIMIT 1[m
+[32m+[m[32m      '''),[m
+       parameters: {'id': userId},[m
+     );[m
+ [m
+[1mdiff --git a/lib/features/auth/data/auth_repository.dart b/lib/features/auth/data/auth_repository.dart[m
+[1mindex 64f57bd..6b69816 100644[m
+[1m--- a/lib/features/auth/data/auth_repository.dart[m
+[1m+++ b/lib/features/auth/data/auth_repository.dart[m
+[36m@@ -95,6 +95,69 @@[m [mclass AuthRepository {[m
+     await _tokenStorage.deleteToken();[m
+   }[m
+ [m
+[32m+[m[32m  /// دریافت آخرین اطلاعات پروفایل کاربر از سرور.[m
+[32m+[m[32m  Future<AuthUser> getProfile() async {[m
+[32m+[m[32m    final token = await _tokenStorage.readToken();[m
+[32m+[m
+[32m+[m[32m    if (token == null || token.isEmpty) {[m
+[32m+[m[32m      throw const ApiException([m
+[32m+[m[32m        'برای دریافت پروفایل ابتدا وارد حساب کاربری شوید.',[m
+[32m+[m[32m        statusCode: 401,[m
+[32m+[m[32m      );[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    final response = await _apiClient.get('/users/me', token: token);[m
+[32m+[m
+[32m+[m[32m    final data = response['data'];[m
+[32m+[m
+[32m+[m[32m    if (data is! Map<String, dynamic>) {[m
+[32m+[m[32m      throw const ApiException('ساختار پاسخ پروفایل معتبر نیست.');[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    return AuthUser.fromJson(data);[m
+[32m+[m[32m  }[m
+[32m+[m
+[32m+[m[32m  /// به‌روزرسانی فیلدهای انتخاب‌شده پروفایل در سرور.[m
+[32m+[m[32m  Future<AuthUser> updateProfile({[m
+[32m+[m[32m    String? username,[m
+[32m+[m[32m    String? displayName,[m
+[32m+[m[32m    String? bio,[m
+[32m+[m[32m    bool updateBio = false,[m
+[32m+[m[32m  }) async {[m
+[32m+[m[32m    final token = await _tokenStorage.readToken();[m
+[32m+[m
+[32m+[m[32m    if (token == null || token.isEmpty) {[m
+[32m+[m[32m      throw const ApiException([m
+[32m+[m[32m        'برای ویرایش پروفایل ابتدا وارد حساب کاربری شوید.',[m
+[32m+[m[32m        statusCode: 401,[m
+[32m+[m[32m      );[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    final body = <String, dynamic>{[m
+[32m+[m[32m      if (username != null) 'username': username,[m
+[32m+[m[32m      if (displayName != null) 'display_name': displayName,[m
+[32m+[m[32m      if (updateBio) 'bio': bio,[m
+[32m+[m[32m    };[m
+[32m+[m
+[32m+[m[32m    if (body.isEmpty) {[m
+[32m+[m[32m      throw const ApiException('حداقل یک فیلد برای ویرایش باید مشخص شود.');[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    final response = await _apiClient.patch([m
+[32m+[m[32m      '/users/me',[m
+[32m+[m[32m      token: token,[m
+[32m+[m[32m      body: body,[m
+[32m+[m[32m    );[m
+[32m+[m
+[32m+[m[32m    final data = response['data'];[m
+[32m+[m
+[32m+[m[32m    if (data is! Map<String, dynamic>) {[m
+[32m+[m[32m      throw const ApiException('ساختار پاسخ ویرایش پروفایل معتبر نیست.');[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    return AuthUser.fromJson(data);[m
+[32m+[m[32m  }[m
+[32m+[m
+   Future<String?> readAccessToken() {[m
+     return _tokenStorage.readToken();[m
+   }[m
+[1mdiff --git a/lib/features/auth/models/auth_user.dart b/lib/features/auth/models/auth_user.dart[m
+[1mindex e0aa971..800c4b2 100644[m
+[1m--- a/lib/features/auth/models/auth_user.dart[m
+[1m+++ b/lib/features/auth/models/auth_user.dart[m
+[36m@@ -1,9 +1,12 @@[m
+[32m+[m
+ class AuthUser {[m
+   const AuthUser({[m
+     required this.id,[m
+     required this.username,[m
+     required this.displayName,[m
+     this.email,[m
+[32m+[m[32m    this.bio,[m
+[32m+[m[32m    this.avatarStorageKey,[m
+     this.createdAt,[m
+   });[m
+ [m
+[36m@@ -11,15 +14,38 @@[m [mclass AuthUser {[m
+   final String username;[m
+   final String displayName;[m
+   final String? email;[m
+[32m+[m[32m  final String? bio;[m
+[32m+[m[32m  final String? avatarStorageKey;[m
+   final String? createdAt;[m
+ [m
+   factory AuthUser.fromJson(Map<String, dynamic> json) {[m
+[32m+[m[32m    final idValue = json['id'];[m
+[32m+[m[32m    final usernameValue = json['username'];[m
+[32m+[m[32m    final displayNameValue = json['display_name'];[m
+[32m+[m
+[32m+[m[32m    if (idValue is! num ||[m
+[32m+[m[32m        usernameValue is! String ||[m
+[32m+[m[32m        displayNameValue is! String) {[m
+[32m+[m[32m      throw const FormatException([m
+[32m+[m[32m        'ساختار اطلاعات پایه کاربر در پاسخ سرور معتبر نیست.',[m
+[32m+[m[32m      );[m
+[32m+[m[32m    }[m
+[32m+[m
+     return AuthUser([m
+[31m-      id: (json['id'] as num).toInt(),[m
+[31m-      username: json['username'] as String,[m
+[31m-      displayName: json['display_name'] as String,[m
+[31m-      email: json['email'] as String?,[m
+[31m-      createdAt: json['created_at'] as String?,[m
+[32m+[m[32m      id: idValue.toInt(),[m
+[32m+[m[32m      username: usernameValue,[m
+[32m+[m[32m      displayName: displayNameValue,[m
+[32m+[m[32m      email: _optionalString(json['email']),[m
+[32m+[m[32m      bio: _optionalString(json['bio']),[m
+[32m+[m[32m      avatarStorageKey: _optionalString(json['avatar_storage_key']),[m
+[32m+[m[32m      createdAt: _optionalString(json['created_at']),[m
+     );[m
+   }[m
+[32m+[m
+[32m+[m[32m  static String? _optionalString(Object? value) {[m
+[32m+[m[32m    if (value is! String) return null;[m
+[32m+[m
+[32m+[m[32m    final normalized = value.trim();[m
+[32m+[m[32m    return normalized.isEmpty ? null : normalized;[m
+[32m+[m[32m  }[m
+ }[m

@@ -82,7 +82,14 @@ class AuthRepository {
           @email,
           @passwordHash
         )
-        RETURNING id, username, display_name, email, created_at
+        RETURNING
+  id,
+  username,
+  display_name,
+  email,
+  bio,
+  avatar_storage_key,
+  created_at
       '''),
       parameters: {
         'username': username,
@@ -112,18 +119,20 @@ class AuthRepository {
   Future<Map<String, dynamic>?> findById(int userId) async {
     final result = await database.execute(
       Sql.named('''
-      SELECT
-        id,
-        username,
-        display_name,
-        email,
-        created_at,
-        status
-      FROM public.users
-      WHERE id = @id
-        AND deleted_at IS NULL
-      LIMIT 1
-    '''),
+        SELECT
+  id,
+  username,
+  display_name,
+  email,
+  bio,
+  avatar_storage_key,
+  created_at,
+  status
+FROM public.users
+WHERE id = @id
+  AND deleted_at IS NULL
+LIMIT 1
+      '''),
       parameters: {'id': userId},
     );
 

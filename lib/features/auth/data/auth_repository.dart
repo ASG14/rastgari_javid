@@ -95,6 +95,69 @@ class AuthRepository {
     await _tokenStorage.deleteToken();
   }
 
+  /// دریافت آخرین اطلاعات پروفایل کاربر از سرور.
+  Future<AuthUser> getProfile() async {
+    final token = await _tokenStorage.readToken();
+
+    if (token == null || token.isEmpty) {
+      throw const ApiException(
+        'برای دریافت پروفایل ابتدا وارد حساب کاربری شوید.',
+        statusCode: 401,
+      );
+    }
+
+    final response = await _apiClient.get('/users/me', token: token);
+
+    final data = response['data'];
+
+    if (data is! Map<String, dynamic>) {
+      throw const ApiException('ساختار پاسخ پروفایل معتبر نیست.');
+    }
+
+    return AuthUser.fromJson(data);
+  }
+
+  /// به‌روزرسانی فیلدهای انتخاب‌شده پروفایل در سرور.
+  Future<AuthUser> updateProfile({
+    String? username,
+    String? displayName,
+    String? bio,
+    bool updateBio = false,
+  }) async {
+    final token = await _tokenStorage.readToken();
+
+    if (token == null || token.isEmpty) {
+      throw const ApiException(
+        'برای ویرایش پروفایل ابتدا وارد حساب کاربری شوید.',
+        statusCode: 401,
+      );
+    }
+
+    final body = <String, dynamic>{
+      if (username != null) 'username': username,
+      if (displayName != null) 'display_name': displayName,
+      if (updateBio) 'bio': bio,
+    };
+
+    if (body.isEmpty) {
+      throw const ApiException('حداقل یک فیلد برای ویرایش باید مشخص شود.');
+    }
+
+    final response = await _apiClient.patch(
+      '/users/me',
+      token: token,
+      body: body,
+    );
+
+    final data = response['data'];
+
+    if (data is! Map<String, dynamic>) {
+      throw const ApiException('ساختار پاسخ ویرایش پروفایل معتبر نیست.');
+    }
+
+    return AuthUser.fromJson(data);
+  }
+
   Future<String?> readAccessToken() {
     return _tokenStorage.readToken();
   }
