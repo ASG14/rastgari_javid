@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../app/navigation/widgets/app_bottom_navigation.dart';
+import 'widgets/app_bottom_navigation.dart';
 import '../../features/auth/data/auth_repository.dart';
 import '../../features/auth/models/auth_user.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
@@ -8,10 +8,11 @@ import '../../features/events/presentation/screens/events_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/messages/presentation/screens/messages_screen.dart';
 import '../../features/notifications/data/notification_repository.dart';
-import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/notifications/presentation/screens/notifications_screen.dart';
 import '../../features/posts/models/post.dart';
 import '../../features/posts/presentation/screens/create_post_screen.dart';
+import '../../features/profile/presentation/screens/edit_profile_screen.dart';
+import '../../features/profile/presentation/screens/profile_screen.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({
@@ -31,6 +32,8 @@ class _MainNavigationState extends State<MainNavigation> {
   final NotificationRepository _notificationRepository =
       NotificationRepository();
 
+  late AuthUser _user;
+
   int _currentIndex = 0;
   int _feedRefreshVersion = 0;
   int _unreadNotificationCount = 0;
@@ -49,6 +52,7 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   void initState() {
     super.initState();
+    _user = widget.user;
     _refreshUnreadNotificationCount();
   }
 
@@ -66,7 +70,7 @@ class _MainNavigationState extends State<MainNavigation> {
         _unreadNotificationCount = count;
       });
     } catch (_) {
-      // خطای دریافت تعداد اعلان‌ها نباید مانع استفاده از برنامه شود.
+      // خطای دریافت اعلان‌ها نباید مانع استفاده از برنامه شود.
     } finally {
       _isLoadingUnreadCount = false;
     }
@@ -83,6 +87,30 @@ class _MainNavigationState extends State<MainNavigation> {
     if (mounted) {
       await _refreshUnreadNotificationCount();
     }
+  }
+
+  Future<void> _openEditProfile() async {
+    final updatedUser = await Navigator.of(context).push<AuthUser>(
+      MaterialPageRoute<AuthUser>(
+        builder: (_) => EditProfileScreen(
+          user: _user,
+          authRepository: widget.authRepository,
+        ),
+      ),
+    );
+
+    if (!mounted || updatedUser == null) return;
+
+    setState(() {
+      _user = updatedUser;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('پروفایل با موفقیت به‌روزرسانی شد.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Future<void> _logout() async {
@@ -177,7 +205,7 @@ class _MainNavigationState extends State<MainNavigation> {
   Widget build(BuildContext context) {
     final pages = <Widget>[
       HomeScreen(
-        user: widget.user,
+        user: _user,
         authRepository: widget.authRepository,
         feedRefreshVersion: _feedRefreshVersion,
       ),
@@ -188,8 +216,9 @@ class _MainNavigationState extends State<MainNavigation> {
       ),
       const EventsScreen(),
       ProfileScreen(
-        user: widget.user,
+        user: _user,
         isLoggingOut: _isLoggingOut,
+        onEditProfile: _openEditProfile,
         onLogout: _logout,
       ),
     ];
