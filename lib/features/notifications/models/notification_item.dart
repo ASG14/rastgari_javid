@@ -1,4 +1,3 @@
-
 class NotificationItem {
   const NotificationItem({
     required this.id,
@@ -60,37 +59,25 @@ class NotificationItem {
         : <String, dynamic>{};
 
     final id = _stringValue(json['id']);
-    final type = _stringValue(
-      json['type'] ?? json['notification_type'],
-    );
+    final type = _stringValue(json['type'] ?? json['notification_type']);
 
     final postId = _intValue(json['post_id']);
-    final createdAt = DateTime.tryParse(
-      _stringValue(json['created_at']),
-    );
+    final createdAt = DateTime.tryParse(_stringValue(json['created_at']));
 
     if (id.isEmpty) {
-      throw const FormatException(
-        'شناسه اعلان در پاسخ سرور وجود ندارد.',
-      );
+      throw const FormatException('شناسه اعلان در پاسخ سرور وجود ندارد.');
     }
 
     if (type.isEmpty) {
-      throw const FormatException(
-        'نوع اعلان در پاسخ سرور وجود ندارد.',
-      );
+      throw const FormatException('نوع اعلان در پاسخ سرور وجود ندارد.');
     }
 
     if (postId == null) {
-      throw const FormatException(
-        'شناسه پست در پاسخ اعلان معتبر نیست.',
-      );
+      throw const FormatException('شناسه پست در پاسخ اعلان معتبر نیست.');
     }
 
     if (createdAt == null) {
-      throw const FormatException(
-        'زمان ایجاد اعلان در پاسخ سرور معتبر نیست.',
-      );
+      throw const FormatException('زمان ایجاد اعلان در پاسخ سرور معتبر نیست.');
     }
 
     final readAtValue = json['read_at'];
@@ -98,9 +85,7 @@ class NotificationItem {
         ? null
         : DateTime.tryParse(_stringValue(readAtValue));
 
-    final actorId = _intValue(
-      actor['id'] ?? json['actor_id'],
-    );
+    final actorId = _intValue(actor['id'] ?? json['actor_id']);
 
     final actorUsername = _nullableString(
       actor['username'] ?? json['actor_username'],
@@ -117,8 +102,7 @@ class NotificationItem {
       commentId: _intValue(json['comment_id']),
       createdAt: createdAt,
       readAt: readAt,
-      isRead: _boolValue(json['is_read']) ||
-          readAt != null,
+      isRead: _boolValue(json['is_read']) || readAt != null,
       actorId: actorId,
       actorUsername: actorUsername,
       actorDisplayName: actorDisplayName,

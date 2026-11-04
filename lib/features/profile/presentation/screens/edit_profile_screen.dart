@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import '../../../auth/data/auth_repository.dart';
@@ -31,15 +30,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void initState() {
     super.initState();
 
-    _usernameController = TextEditingController(
-      text: widget.user.username,
-    );
+    _usernameController = TextEditingController(text: widget.user.username);
     _displayNameController = TextEditingController(
       text: widget.user.displayName,
     );
-    _bioController = TextEditingController(
-      text: widget.user.bio ?? '',
-    );
+    _bioController = TextEditingController(text: widget.user.bio ?? '');
   }
 
   @override
@@ -122,9 +117,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('ویرایش پروفایل'),
-      ),
+      appBar: AppBar(title: const Text('ویرایش پروفایل')),
       body: SafeArea(
         child: Form(
           key: _formKey,
@@ -184,14 +177,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ? const SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.save_outlined),
-                label: Text(
-                  _isSaving ? 'در حال ذخیره...' : 'ذخیره تغییرات',
-                ),
+                label: Text(_isSaving ? 'در حال ذخیره...' : 'ذخیره تغییرات'),
               ),
             ],
           ),

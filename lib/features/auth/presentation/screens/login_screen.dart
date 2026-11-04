@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/auth_repository.dart';
 import 'register_screen.dart';
-import '../../../home/presentation/screens/home_screen.dart';
+import '../../../../app/navigation/main_navigation.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, AuthRepository? authRepository})
@@ -54,8 +54,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
       await Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
-          builder: (_) =>
-              HomeScreen(user: response.user, authRepository: _authRepository),
+          builder: (_) => MainNavigation(
+            user: response.user,
+            authRepository: _authRepository,
+          ),
         ),
       );
     } catch (error) {
