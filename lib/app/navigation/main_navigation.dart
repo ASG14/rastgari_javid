@@ -217,6 +217,7 @@ class _MainNavigationState extends State<MainNavigation> {
       const EventsScreen(),
       ProfileScreen(
         user: _user,
+        authRepository: widget.authRepository,
         isLoggingOut: _isLoggingOut,
         onEditProfile: _openEditProfile,
         onLogout: _logout,

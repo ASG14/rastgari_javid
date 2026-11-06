@@ -1,217 +1,426 @@
+
 import 'package:flutter/material.dart';
 
+import '../../../auth/data/auth_repository.dart';
 import '../../../auth/models/auth_user.dart';
+import '../../../posts/data/posts_repository.dart';
+import '../../../posts/models/post.dart';
+import '../../../posts/presentation/widgets/post_card.dart';
+import '../../../comments/presentation/screens/post_comments_screen.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
     super.key,
     required this.user,
+    required this.authRepository,
     required this.isLoggingOut,
     required this.onEditProfile,
     required this.onLogout,
   });
 
   final AuthUser user;
+  final AuthRepository authRepository;
   final bool isLoggingOut;
   final VoidCallback onEditProfile;
   final VoidCallback onLogout;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final hasBio = user.bio?.trim().isNotEmpty == true;
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
-      children: [
-        Center(
-          child: CircleAvatar(
-            radius: 48,
-            backgroundColor: colors.primaryContainer,
-            child: Icon(
-              Icons.person_outline_rounded,
-              size: 52,
-              color: colors.onPrimaryContainer,
-            ),
-          ),
-        ),
-        const SizedBox(height: 18),
-        Text(
-          user.displayName,
-          textAlign: TextAlign.center,
-          style: theme.textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          '@${user.username}',
-          textDirection: TextDirection.ltr,
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodyLarge?.copyWith(
-            color: colors.onSurfaceVariant,
-          ),
-        ),
-        if (user.email != null && user.email!.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text(
-            user.email!,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colors.onSurfaceVariant,
-            ),
-          ),
-        ],
-        const SizedBox(height: 20),
-        FilledButton.icon(
-          onPressed: onEditProfile,
-          icon: const Icon(Icons.edit_outlined),
-          label: const Text('ویرایش پروفایل'),
-        ),
-        const SizedBox(height: 24),
-        _ProfileSection(
-          title: 'درباره من',
-          icon: Icons.notes_outlined,
-          child: Text(
-            hasBio ? user.bio! : 'هنوز توضیحی برای پروفایل خود ننوشته‌ای.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              height: 1.9,
-              color: hasBio ? colors.onSurface : colors.onSurfaceVariant,
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
-        _ProfileSection(
-          title: 'اطلاعات حساب',
-          icon: Icons.manage_accounts_outlined,
-          child: Column(
-            children: [
-              _InfoRow(
-                icon: Icons.alternate_email_rounded,
-                label: 'نام کاربری',
-                value: user.username,
-                textDirection: TextDirection.ltr,
-              ),
-              if (user.email != null && user.email!.isNotEmpty) ...[
-                const Divider(height: 24),
-                _InfoRow(
-                  icon: Icons.mail_outline_rounded,
-                  label: 'ایمیل',
-                  value: user.email!,
-                  textDirection: TextDirection.ltr,
-                ),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(height: 28),
-        OutlinedButton.icon(
-          onPressed: isLoggingOut ? null : onLogout,
-          icon: isLoggingOut
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.logout_rounded),
-          label: Text(isLoggingOut ? 'در حال خروج...' : 'خروج از حساب'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: colors.error,
-            side: BorderSide(color: colors.error.withValues(alpha: 0.5)),
-            padding: const EdgeInsets.symmetric(vertical: 14),
-          ),
-        ),
-      ],
-    );
-  }
+  State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileSection extends StatelessWidget {
-  const _ProfileSection({
-    required this.title,
-    required this.icon,
-    required this.child,
-  });
+class _ProfileScreenState extends State<ProfileScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+  final PostsRepository _postsRepository = PostsRepository();
 
-  final String title;
-  final IconData icon;
-  final Widget child;
+  List<Post> _posts = [];
+  bool _isLoadingPosts = true;
+  String? _postsError;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _loadMyPosts();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProfileScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.user.id != widget.user.id) {
+      _loadMyPosts();
+    }
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadMyPosts() async {
+    setState(() {
+      _isLoadingPosts = true;
+      _postsError = null;
+    });
+
+    try {
+      final token = await widget.authRepository.readAccessToken();
+      final allPosts = await _postsRepository.getPublicPosts(
+        token: token,
+      );
+
+      if (!mounted) return;
+
+      final myPosts = allPosts
+          .where((post) => post.author.id == widget.user.id.toString())
+          .toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      setState(() {
+        _posts = myPosts;
+        _isLoadingPosts = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _postsError = error.toString();
+        _isLoadingPosts = false;
+      });
+    }
+  }
+
+  Future<void> _handleLikeChanged(Post post, bool isLiked) async {
+    final token = await widget.authRepository.readAccessToken();
+
+    if (token == null || token.isEmpty) {
+      throw Exception('برای ثبت همدلی باید وارد حساب کاربری شوید.');
+    }
+
+    final result = await _postsRepository.setPostLike(
+      postId: post.id,
+      isLiked: isLiked,
+      token: token,
+    );
+
+    final serverIsLiked = result['is_liked'];
+    final serverLikeCount = result['likes_count'];
+
+    if (serverIsLiked is! bool || serverLikeCount is! num) {
+      throw const FormatException(
+        'پاسخ سرور برای به‌روزرسانی همدلی معتبر نیست.',
+      );
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _posts = _posts.map((item) {
+        if (item.id != post.id) return item;
+
+        return item.copyWith(
+          isLiked: serverIsLiked,
+          likeCount: serverLikeCount.toInt(),
+        );
+      }).toList();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = theme.colorScheme;
 
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colors.outlineVariant.withValues(alpha: 0.5)),
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: RefreshIndicator(
+        onRefresh: _loadMyPosts,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.only(bottom: 32),
+          children: [
+            _buildProfileHeader(context),
+            const SizedBox(height: 12),
+            _buildTabs(context),
+            SizedBox(
+              height: 520,
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildPostsTab(context),
+                  _buildUnavailableTab(
+                    context,
+                    icon: Icons.favorite_border_rounded,
+                    title: 'عزیزان من',
+                    message:
+                        'پروفایل‌های یادبود مرتبط با حساب شما در این بخش نمایش داده می‌شوند.',
+                  ),
+                  _buildUnavailableTab(
+                    context,
+                    icon: Icons.event_note_rounded,
+                    title: 'رویدادهای من',
+                    message:
+                        'رویدادهای متعلق به حساب شما در این بخش نمایش داده می‌شوند.',
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              child: OutlinedButton.icon(
+                onPressed:
+                    widget.isLoggingOut ? null : widget.onLogout,
+                icon: widget.isLoggingOut
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Icon(Icons.logout_rounded),
+                label: Text(
+                  widget.isLoggingOut
+                      ? 'در حال خروج...'
+                      : 'خروج از حساب',
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: theme.colorScheme.error,
+                  side: BorderSide(
+                    color: theme.colorScheme.error
+                        .withValues(alpha: 0.5),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildProfileHeader(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final bio = widget.user.bio?.trim();
+    final hasBio = bio != null && bio.isNotEmpty;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, color: colors.primary, size: 21),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
+              CircleAvatar(
+                radius: 36,
+                backgroundColor: colors.primaryContainer,
+                foregroundColor: colors.onPrimaryContainer,
+                child: const Icon(
+                  Icons.person_rounded,
+                  size: 38,
                 ),
+              ),
+              const Spacer(),
+              OutlinedButton(
+                onPressed: widget.onEditProfile,
+                style: OutlinedButton.styleFrom(
+                  shape: const StadiumBorder(),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 11,
+                  ),
+                ),
+                child: const Text('ویرایش پروفایل'),
               ),
             ],
           ),
           const SizedBox(height: 14),
-          child,
+          Text(
+            widget.user.displayName,
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            '@${widget.user.username}',
+            textDirection: TextDirection.ltr,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            hasBio
+                ? bio
+                : 'هنوز بیوگرافی‌ای برای پروفایل نوشته نشده است.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              height: 1.8,
+              color: hasBio
+                  ? colors.onSurface
+                  : colors.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 18),
+          Divider(
+            height: 1,
+            color: colors.outlineVariant.withValues(alpha: 0.7),
+          ),
         ],
       ),
     );
   }
-}
 
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    this.textDirection,
-  });
+  Widget _buildTabs(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
 
-  final IconData icon;
-  final String label;
-  final String value;
-  final TextDirection? textDirection;
+    return TabBar(
+      controller: _tabController,
+      isScrollable: false,
+      labelColor: colors.primary,
+      unselectedLabelColor: colors.onSurfaceVariant,
+      indicatorColor: colors.primary,
+      indicatorWeight: 3,
+      labelStyle: const TextStyle(
+        fontWeight: FontWeight.w700,
+        fontSize: 13,
+      ),
+      tabs: const [
+        Tab(text: 'پست‌ها'),
+        Tab(text: 'عزیزان من'),
+        Tab(text: 'رویدادهای من'),
+      ],
+    );
+  }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildPostsTab(BuildContext context) {
+    if (_isLoadingPosts) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    if (_postsError != null) {
+      return _buildMessageState(
+        context,
+        icon: Icons.cloud_off_outlined,
+        title: 'دریافت پست‌ها ناموفق بود',
+        message: _postsError!,
+        action: TextButton.icon(
+          onPressed: _loadMyPosts,
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('تلاش مجدد'),
+        ),
+      );
+    }
+
+    if (_posts.isEmpty) {
+      return _buildMessageState(
+        context,
+        icon: Icons.post_add_rounded,
+        title: 'هنوز پستی منتشر نکرده‌اید',
+        message: 'پست‌های عمومی شما پس از انتشار در این بخش نمایش داده می‌شوند.',
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      itemCount: _posts.length,
+      itemBuilder: (context, index) {
+        final post = _posts[index];
+
+        return PostCard(
+          key: ValueKey(post.id),
+          post: post,
+          onLikeChanged: (isLiked) =>
+              _handleLikeChanged(post, isLiked),
+          onCommentsTap: () async {
+            await Navigator.of(context).push<bool>(
+              MaterialPageRoute<bool>(
+                builder: (_) => PostCommentsScreen(
+                  post: post,
+                  authRepository: widget.authRepository,
+                ),
+              ),
+            );
+
+            if (mounted) {
+              await _loadMyPosts();
+            }
+          },
+          onShareTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'اشتراک‌گذاری در مرحله بعد اضافه می‌شود.',
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildUnavailableTab(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String message,
+  }) {
+    return _buildMessageState(
+      context,
+      icon: icon,
+      title: title,
+      message: message,
+    );
+  }
+
+  Widget _buildMessageState(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String message,
+    Widget? action,
+  }) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 20, color: colors.onSurfaceVariant),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colors.onSurfaceVariant,
-                ),
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 44, color: colors.primary),
+            const SizedBox(height: 14),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
               ),
-              const SizedBox(height: 4),
-              Text(value, textDirection: textDirection),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                height: 1.8,
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+            if (action != null) ...[
+              const SizedBox(height: 12),
+              action,
             ],
-          ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
