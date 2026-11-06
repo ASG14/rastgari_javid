@@ -1,6 +1,3 @@
-
-BEGIN;
-
 -- 1. Relationship between a user and a deceased person.
 CREATE TYPE public.memorial_relationship AS ENUM (
     'mother',
@@ -126,5 +123,3 @@ CREATE INDEX memorial_members_profile_idx
 CREATE INDEX memorial_members_notifications_idx
     ON public.memorial_members (user_id, memorial_profile_id)
     WHERE status = 'active' AND notifications_enabled = TRUE;
-
-COMMIT;

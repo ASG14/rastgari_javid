@@ -94,7 +94,7 @@ class MemorialProfileRepository {
 
       // The creator becomes the first active owner.
       // Their actual relationship is supplied by the user.
-      await session.execute(
+      final membershipResult = await session.execute(
         Sql.named('''
           INSERT INTO public.memorial_members (
             memorial_profile_id,
@@ -110,6 +110,12 @@ class MemorialProfileRepository {
             'owner',
             'active'
           )
+          RETURNING
+            id,
+            relationship::text AS relationship,
+            role::text AS role,
+            status::text AS status,
+            notifications_enabled
         '''),
         parameters: {
           'profileId': profileId,
@@ -118,8 +124,15 @@ class MemorialProfileRepository {
         },
       );
 
+      if (membershipResult.isEmpty) {
+        throw StateError('The memorial membership was not created.');
+      }
+
+      final membership = membershipResult.first.toColumnMap();
+
       final mappedProfile = _mapProfile(profile);
-      mappedProfile['membership']['relationship'] = relationship;
+      mappedProfile['membership'] = _mapMembership(membership);
+
       return mappedProfile;
     });
   }
@@ -176,12 +189,13 @@ class MemorialProfileRepository {
 
     return result.map((row) {
       final data = row.toColumnMap();
+
       return {
         'id': data['id'],
         'full_name': data['full_name'],
         'photo_media_asset_id': data['photo_media_asset_id'],
-        'birth_date': data['birth_date']?.toString(),
-        'death_date': data['death_date']?.toString(),
+        'birth_date': _formatDate(data['birth_date']),
+        'death_date': _formatDate(data['death_date']),
         'memorial_text': data['memorial_text'],
         'grave_address': data['grave_address'],
         'created_at': data['created_at']?.toString(),
@@ -189,25 +203,6 @@ class MemorialProfileRepository {
         'members_count': data['members_count'],
       };
     }).toList();
-  }
-
-  Map<String, dynamic> _mapProfile(Map<String, dynamic> data) {
-    return {
-      'id': data['id'],
-      'created_by_user_id': data['created_by_user_id'],
-      'full_name': data['full_name'],
-      'photo_media_asset_id': data['photo_media_asset_id'],
-      'birth_date': data['birth_date']?.toString(),
-      'death_date': data['death_date']?.toString(),
-      'memorial_text': data['memorial_text'],
-      'grave_address': data['grave_address'],
-      'created_at': data['created_at']?.toString(),
-      'membership': {
-        'relationship': null,
-        'role': 'owner',
-        'status': 'active',
-      },
-    };
   }
 
   /// Follows an existing memorial profile or reactivates a previous membership.
@@ -265,9 +260,9 @@ class MemorialProfileRepository {
             id,
             memorial_profile_id,
             user_id,
-            relationship,
-            role,
-            status,
+            relationship::text AS relationship,
+            role::text AS role,
+            status::text AS status,
             notifications_enabled,
             created_at,
             updated_at
@@ -289,9 +284,9 @@ class MemorialProfileRepository {
         'id': membership['id'],
         'memorial_profile_id': membership['memorial_profile_id'],
         'user_id': membership['user_id'],
-        'relationship': membership['relationship'].toString(),
-        'role': membership['role'].toString(),
-        'status': membership['status'].toString(),
+        'relationship': _databaseText(membership['relationship']),
+        'role': _databaseText(membership['role']),
+        'status': _databaseText(membership['status']),
         'notifications_enabled': membership['notifications_enabled'],
         'created_at': membership['created_at']?.toString(),
         'updated_at': membership['updated_at']?.toString(),
@@ -330,9 +325,9 @@ class MemorialProfileRepository {
           ) AS members_count,
 
           membership.id AS membership_id,
-          membership.relationship AS membership_relationship,
-          membership.role AS membership_role,
-          membership.status AS membership_status,
+          membership.relationship::text AS membership_relationship,
+          membership.role::text AS membership_role,
+          membership.status::text AS membership_status,
           membership.notifications_enabled
 
         FROM public.memorial_profiles AS mp
@@ -368,9 +363,9 @@ class MemorialProfileRepository {
     if (data['membership_id'] != null) {
       membership = {
         'id': data['membership_id'],
-        'relationship': data['membership_relationship']?.toString(),
-        'role': data['membership_role']?.toString(),
-        'status': data['membership_status']?.toString(),
+        'relationship': _databaseText(data['membership_relationship']),
+        'role': _databaseText(data['membership_role']),
+        'status': _databaseText(data['membership_status']),
         'notifications_enabled': data['notifications_enabled'],
       };
     }
@@ -380,8 +375,8 @@ class MemorialProfileRepository {
       'created_by_user_id': data['created_by_user_id'],
       'full_name': data['full_name'],
       'photo_media_asset_id': data['photo_media_asset_id'],
-      'birth_date': data['birth_date']?.toString(),
-      'death_date': data['death_date']?.toString(),
+      'birth_date': _formatDate(data['birth_date']),
+      'death_date': _formatDate(data['death_date']),
       'memorial_text': data['memorial_text'],
       'grave_address': data['grave_address'],
       'created_at': data['created_at']?.toString(),
@@ -389,6 +384,89 @@ class MemorialProfileRepository {
       'creator_display_name': data['creator_display_name'],
       'members_count': data['members_count'],
       'membership': membership,
+    };
+  }
+
+  /// Converts PostgreSQL text values to Dart strings.
+  ///
+  /// Custom PostgreSQL types may be returned as UndecodedBytes by the driver.
+  String? _databaseText(Object? value) {
+    if (value == null) {
+      return null;
+    }
+
+    if (value is String) {
+      return value;
+    }
+
+    if (value is UndecodedBytes) {
+      return value.asString;
+    }
+
+    throw StateError(
+      'Unsupported database text value: ${value.runtimeType}',
+    );
+  }
+
+  /// Converts PostgreSQL DATE values to YYYY-MM-DD.
+  ///
+  /// PostgreSQL DATE values may be decoded as DateTime or text,
+  /// depending on the query execution mode and driver codec.
+  String? _formatDate(Object? value) {
+    if (value == null) {
+      return null;
+    }
+
+    if (value is DateTime) {
+      return _dateOnly(value);
+    }
+
+    final text = _databaseText(value);
+
+    if (text == null || text.isEmpty) {
+      return null;
+    }
+
+    // A PostgreSQL DATE represented as text is already YYYY-MM-DD.
+    if (text.length >= 10) {
+      return text.substring(0, 10);
+    }
+
+    throw FormatException('Invalid database date value: $text');
+  }
+
+  /// Returns only the calendar date without a time component.
+  String _dateOnly(DateTime value) {
+    final year = value.year.toString().padLeft(4, '0');
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+
+    return '$year-$month-$day';
+  }
+
+  /// Maps a profile database row to the API response structure.
+  Map<String, dynamic> _mapProfile(Map<String, dynamic> data) {
+    return {
+      'id': data['id'],
+      'created_by_user_id': data['created_by_user_id'],
+      'full_name': data['full_name'],
+      'photo_media_asset_id': data['photo_media_asset_id'],
+      'birth_date': _formatDate(data['birth_date']),
+      'death_date': _formatDate(data['death_date']),
+      'memorial_text': data['memorial_text'],
+      'grave_address': data['grave_address'],
+      'created_at': data['created_at']?.toString(),
+    };
+  }
+
+  /// Maps a membership database row to the API response structure.
+  Map<String, dynamic> _mapMembership(Map<String, dynamic> data) {
+    return {
+      'id': data['id'],
+      'relationship': _databaseText(data['relationship']),
+      'role': _databaseText(data['role']),
+      'status': _databaseText(data['status']),
+      'notifications_enabled': data['notifications_enabled'],
     };
   }
 }
