@@ -172,6 +172,23 @@ class MemorialProfileService {
 
     return membership;
   }
+
+  /// Retrieves a memorial profile for an authenticated user.
+  Future<Map<String, dynamic>?> getProfileById({
+    required int profileId,
+    required int userId,
+  }) async {
+    if (profileId < 1 || userId < 1) {
+      throw const MemorialProfileException(
+        'شناسه پروفایل یا کاربر معتبر نیست.',
+      );
+    }
+
+    return _repository.getProfileById(
+      profileId: profileId,
+      userId: userId,
+    );
+  }
 }
 
 /// Represents a memorial-profile validation error.
