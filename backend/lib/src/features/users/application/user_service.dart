@@ -49,7 +49,7 @@ class UserService {
     if (normalizedUsername != null) {
       if (!RegExp(r'^[A-Za-z0-9_]{3,30}$').hasMatch(normalizedUsername)) {
         throw const UserException(
-          'نام کاربری باید ۳ تا ۳۰ کاراکتر و شامل حروف انگلیسی، عدد یا زیرخط باشد.',
+          'نام کاربری باید ۳ تا ۳۰ کاراکتر و شامل /n حروف انگلیسی، عدد یا زیرخط باشد.',
         );
       }
 

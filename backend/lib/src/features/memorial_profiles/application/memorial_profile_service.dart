@@ -114,6 +114,138 @@ class MemorialProfileService {
     );
   }
 
+  /// Updates a memorial profile owned by the authenticated user.
+  Future<Map<String, dynamic>> updateProfile({
+    required int profileId,
+    required int userId,
+    required String fullName,
+    String? birthDate,
+    String? deathDate,
+    String? memorialText,
+    String? graveAddress,
+    int? photoMediaAssetId,
+  }) async {
+    if (profileId < 1 || userId < 1) {
+      throw const MemorialProfileException(
+        'شناسه پروفایل یا کاربر معتبر نیست.',
+      );
+    }
+
+    final normalizedName = fullName.trim();
+
+    if (normalizedName.isEmpty || normalizedName.length > 150) {
+      throw const MemorialProfileException(
+        'نام و نام خانوادگی الزامی است و حداکثر ۱۵۰ کاراکتر دارد.',
+      );
+    }
+
+    final parsedBirthDate = _parseDate(birthDate, 'تاریخ تولد');
+    final parsedDeathDate = _parseDate(deathDate, 'تاریخ وفات');
+
+    if (parsedBirthDate != null &&
+        parsedDeathDate != null &&
+        parsedDeathDate.isBefore(parsedBirthDate)) {
+      throw const MemorialProfileException(
+        'تاریخ وفات نمی‌تواند قبل از تاریخ تولد باشد.',
+      );
+    }
+
+    final normalizedMemorialText = memorialText?.trim();
+    if (normalizedMemorialText != null &&
+        normalizedMemorialText.length > 10000) {
+      throw const MemorialProfileException(
+        'دل‌نوشته نمی‌تواند بیشتر از ۱۰۰۰۰ کاراکتر باشد.',
+      );
+    }
+
+    final normalizedGraveAddress = graveAddress?.trim();
+    if (normalizedGraveAddress != null && normalizedGraveAddress.length > 500) {
+      throw const MemorialProfileException(
+        'نشانی مزار نمی‌تواند بیشتر از ۵۰۰ کاراکتر باشد.',
+      );
+    }
+
+    if (photoMediaAssetId != null && photoMediaAssetId < 1) {
+      throw const MemorialProfileException('شناسه تصویر معتبر نیست.');
+    }
+
+    final profile = await _repository.updateProfile(
+      profileId: profileId,
+      userId: userId,
+      fullName: normalizedName,
+      birthDate: parsedBirthDate,
+      deathDate: parsedDeathDate,
+      memorialText: _emptyToNull(normalizedMemorialText),
+      graveAddress: _emptyToNull(normalizedGraveAddress),
+      photoMediaAssetId: photoMediaAssetId,
+    );
+
+    if (profile == null) {
+      throw const MemorialProfileException(
+        'پروفایل پیدا نشد یا شما سازنده آن نیستید.',
+      );
+    }
+
+    return profile;
+  }
+
+  /// Soft-deletes a profile owned by the authenticated user.
+  Future<void> deleteProfile({
+    required int profileId,
+    required int userId,
+  }) async {
+    if (profileId < 1 || userId < 1) {
+      throw const MemorialProfileException(
+        'شناسه پروفایل یا کاربر معتبر نیست.',
+      );
+    }
+
+    final deleted = await _repository.deleteProfile(
+      profileId: profileId,
+      userId: userId,
+    );
+
+    if (!deleted) {
+      throw const MemorialProfileException(
+        'پروفایل پیدا نشد یا شما سازنده آن نیستید.',
+      );
+    }
+  }
+
+  /// Returns memorial profiles created or followed by the user.
+  Future<List<Map<String, dynamic>>> getUserProfiles({
+    required int userId,
+  }) async {
+    if (userId < 1) {
+      throw const MemorialProfileException('شناسه کاربر معتبر نیست.');
+    }
+
+    return _repository.getUserProfiles(userId: userId);
+  }
+
+  /// Unfollows a memorial profile.
+  Future<void> unfollowProfile({
+    required int profileId,
+    required int userId,
+  }) async {
+    if (profileId < 1 || userId < 1) {
+      throw const MemorialProfileException(
+        'شناسه پروفایل یا کاربر معتبر نیست.',
+      );
+    }
+
+    final unfollowed = await _repository.unfollowProfile(
+      profileId: profileId,
+      userId: userId,
+    );
+
+    if (!unfollowed) {
+      throw const MemorialProfileException(
+        'امکان لغو دنبال‌کردن این پروفایل وجود ندارد.',
+      );
+    }
+  }
+
   DateTime? _parseDate(String? value, String fieldName) {
     if (value == null || value.trim().isEmpty) return null;
 
