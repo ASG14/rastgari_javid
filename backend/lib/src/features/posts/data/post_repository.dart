@@ -106,8 +106,15 @@ class PostRepository {
   /// Posts from private accounts are visible only to accepted followers.
   /// Followers-only posts are visible to followers and their author.
   /// Private posts are visible only to their author.
+  /// Retrieves a page of posts visible to the current user.
+  ///
+  /// Fetches one extra row to determine whether another page exists.
   Future<List<Map<String, dynamic>>> getPublicPosts({
+    required bool cursorPublishedAtIsNull,
+    required int limit,
     int? currentUserId,
+    int? cursorPostId,
+    DateTime? cursorPublishedAt,
   }) async {
     final result = await database.execute(
       Sql.named('''
@@ -187,10 +194,38 @@ class PostRepository {
             )
           )
 
+          AND (
+            CAST(@cursorPostId AS BIGINT) IS NULL
+
+            OR (
+              @cursorPublishedAtIsNull = FALSE
+              AND (
+                p.published_at IS NULL
+                OR p.published_at < @cursorPublishedAt
+                OR (
+                  p.published_at = @cursorPublishedAt
+                  AND p.id < CAST(@cursorPostId AS BIGINT)
+                )
+              )
+            )
+
+            OR (
+              @cursorPublishedAtIsNull = TRUE
+              AND p.published_at IS NULL
+              AND p.id < CAST(@cursorPostId AS BIGINT)
+            )
+          )
+
         ORDER BY p.published_at DESC NULLS LAST, p.id DESC
-        LIMIT 50
+        LIMIT @fetchLimit
       '''),
-      parameters: {'currentUserId': currentUserId},
+      parameters: {
+        'currentUserId': currentUserId,
+        'cursorPostId': cursorPostId,
+        'cursorPublishedAt': cursorPublishedAt,
+        'cursorPublishedAtIsNull': cursorPublishedAtIsNull,
+        'fetchLimit': limit + 1,
+      },
     );
 
     return result.map((row) {

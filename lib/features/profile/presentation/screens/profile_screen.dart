@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import '../../../auth/data/auth_repository.dart';
@@ -67,17 +66,15 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     try {
       final token = await widget.authRepository.readAccessToken();
-      final allPosts = await _postsRepository.getPublicPosts(
-        token: token,
-      );
+      final allPosts = await _postsRepository.getPublicPosts(token: token);
 
       if (!mounted) return;
 
-      final myPosts = allPosts
-          .where((post) => post.author.id == widget.user.id.toString())
-          .toList()
-        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-
+      final myPosts =
+          allPosts.posts
+              .where((post) => post.author.id == widget.user.id.toString())
+              .toList()
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
       setState(() {
         _posts = myPosts;
         _isLoadingPosts = false;
@@ -153,15 +150,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                     context,
                     icon: Icons.favorite_border_rounded,
                     title: 'عزیزان من',
-                    message:
-                        'پروفایل‌های یادبود مرتبط با حساب شما در این بخش نمایش داده می‌شوند.',
+                    message: 'پروفایل‌های یادبود مرتبط با حساب شما در این بخش نمایش داده می‌شوند.',
                   ),
                   _buildUnavailableTab(
                     context,
                     icon: Icons.event_note_rounded,
                     title: 'رویدادهای من',
-                    message:
-                        'رویدادهای متعلق به حساب شما در این بخش نمایش داده می‌شوند.',
+                    message: 'رویدادهای متعلق به حساب شما در این بخش نمایش داده می‌شوند.',
                   ),
                 ],
               ),
@@ -169,27 +164,21 @@ class _ProfileScreenState extends State<ProfileScreen>
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
               child: OutlinedButton.icon(
-                onPressed:
-                    widget.isLoggingOut ? null : widget.onLogout,
+                onPressed: widget.isLoggingOut ? null : widget.onLogout,
                 icon: widget.isLoggingOut
                     ? const SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.logout_rounded),
                 label: Text(
-                  widget.isLoggingOut
-                      ? 'در حال خروج...'
-                      : 'خروج از حساب',
+                  widget.isLoggingOut ? 'در حال خروج...' : 'خروج از حساب',
                 ),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: theme.colorScheme.error,
                   side: BorderSide(
-                    color: theme.colorScheme.error
-                        .withValues(alpha: 0.5),
+                    color: theme.colorScheme.error.withValues(alpha: 0.5),
                   ),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
@@ -219,10 +208,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 radius: 36,
                 backgroundColor: colors.primaryContainer,
                 foregroundColor: colors.onPrimaryContainer,
-                child: const Icon(
-                  Icons.person_rounded,
-                  size: 38,
-                ),
+                child: const Icon(Icons.person_rounded, size: 38),
               ),
               const Spacer(),
               OutlinedButton(
@@ -255,14 +241,10 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
           const SizedBox(height: 12),
           Text(
-            hasBio
-                ? bio
-                : 'هنوز بیوگرافی‌ای برای پروفایل نوشته نشده است.',
+            hasBio ? bio : 'هنوز بیوگرافی‌ای برای پروفایل نوشته نشده است.',
             style: theme.textTheme.bodyMedium?.copyWith(
               height: 1.8,
-              color: hasBio
-                  ? colors.onSurface
-                  : colors.onSurfaceVariant,
+              color: hasBio ? colors.onSurface : colors.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 18),
@@ -285,10 +267,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       unselectedLabelColor: colors.onSurfaceVariant,
       indicatorColor: colors.primary,
       indicatorWeight: 3,
-      labelStyle: const TextStyle(
-        fontWeight: FontWeight.w700,
-        fontSize: 13,
-      ),
+      labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
       tabs: const [
         Tab(text: 'پست‌ها'),
         Tab(text: 'عزیزان من'),
@@ -299,9 +278,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Widget _buildPostsTab(BuildContext context) {
     if (_isLoadingPosts) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (_postsError != null) {
@@ -323,7 +300,8 @@ class _ProfileScreenState extends State<ProfileScreen>
         context,
         icon: Icons.post_add_rounded,
         title: 'هنوز پستی منتشر نکرده‌اید',
-        message: 'پست‌های عمومی شما پس از انتشار در این بخش نمایش داده می‌شوند.',
+        message:
+            'پست‌های عمومی شما پس از انتشار در این بخش نمایش داده می‌شوند.',
       );
     }
 
@@ -336,8 +314,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         return PostCard(
           key: ValueKey(post.id),
           post: post,
-          onLikeChanged: (isLiked) =>
-              _handleLikeChanged(post, isLiked),
+          onLikeChanged: (isLiked) => _handleLikeChanged(post, isLiked),
           onCommentsTap: () async {
             await Navigator.of(context).push<bool>(
               MaterialPageRoute<bool>(
@@ -355,9 +332,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           onShareTap: () {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text(
-                  'اشتراک‌گذاری در مرحله بعد اضافه می‌شود.',
-                ),
+                content: Text('اشتراک‌گذاری در مرحله بعد اضافه می‌شود.'),
               ),
             );
           },
@@ -414,10 +389,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 color: colors.onSurfaceVariant,
               ),
             ),
-            if (action != null) ...[
-              const SizedBox(height: 12),
-              action,
-            ],
+            if (action != null) ...[const SizedBox(height: 12), action],
           ],
         ),
       ),

@@ -54,14 +54,37 @@ Future<Response> _getPosts(RequestContext context) async {
       }
     }
 
-    final posts = await postService.getPublicPosts(
+    final queryParameters = context.request.uri.queryParameters;
+
+    final limitValue = queryParameters['limit'];
+    final limit = limitValue == null ? 20 : int.tryParse(limitValue);
+
+    if (limit == null || limit < 1 || limit > 50) {
+      return Response.json(
+        statusCode: 400,
+        body: {
+          'error': 'پارامتر limit باید عددی بین ۱ تا ۵۰ باشد.',
+        },
+      );
+    }
+
+    final cursor = queryParameters['cursor'];
+
+    final page = await postService.getPublicPosts(
       currentUserId: currentUserId,
+      limit: limit,
+      cursor: cursor,
     );
 
-    return Response.json(body: {'data': posts});
+    return Response.json(body: page);
   } on AuthException catch (error) {
     return Response.json(
       statusCode: error.statusCode,
+      body: {'error': error.message},
+    );
+  } on PostException catch (error) {
+    return Response.json(
+      statusCode: 400,
       body: {'error': error.message},
     );
   } catch (error, stackTrace) {
