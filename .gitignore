@@ -17,7 +17,9 @@ coverage/
 .DS_Store
 Thumbs.db
 
-# Android local configuration
+# Android local configuration and generated files
 android/local.properties
+android/.kotlin/
+
 # Widget Preview related
 .widget_preview/
