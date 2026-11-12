@@ -70,6 +70,50 @@ class PostService {
       currentUserId: currentUserId,
     );
   }
+
+  /// Updates the content of a post owned by the authenticated user.
+  Future<Map<String, dynamic>?> updatePost({
+    required int postId,
+    required int userId,
+    required String content,
+  }) {
+    if (postId < 1 || userId < 1) {
+      throw const PostException('شناسه پست یا کاربر معتبر نیست.');
+    }
+
+    final normalizedContent = content.trim();
+
+    if (normalizedContent.isEmpty) {
+      throw const PostException('متن پست نمی‌تواند خالی باشد.');
+    }
+
+    if (normalizedContent.length > 10000) {
+      throw const PostException(
+        'متن پست نمی‌تواند بیشتر از ۱۰۰۰۰ کاراکتر باشد.',
+      );
+    }
+
+    return _postRepository.updatePost(
+      postId: postId,
+      userId: userId,
+      content: normalizedContent,
+    );
+  }
+
+  /// Soft-deletes a post owned by the authenticated user.
+  Future<bool> deletePost({
+    required int postId,
+    required int userId,
+  }) {
+    if (postId < 1 || userId < 1) {
+      throw const PostException('شناسه پست یا کاربر معتبر نیست.');
+    }
+
+    return _postRepository.deletePost(
+      postId: postId,
+      userId: userId,
+    );
+  }
 }
 
 /// Represents a post-related validation error.

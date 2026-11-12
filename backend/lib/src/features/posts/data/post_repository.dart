@@ -269,6 +269,96 @@ class PostRepository {
     return _mapPost(result.first.toColumnMap());
   }
 
+  /// Updates a published post owned by the specified user.
+  ///
+  /// Returns null when the post does not exist or is not owned by the user.
+  Future<Map<String, dynamic>?> updatePost({
+    required int postId,
+    required int userId,
+    required String content,
+  }) async {
+    final result = await database.execute(
+      Sql.named('''
+        WITH updated_post AS (
+          UPDATE public.posts
+          SET
+            content = @content,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = @postId
+            AND user_id = @userId
+            AND status = 'published'
+            AND deleted_at IS NULL
+          RETURNING
+            id,
+            user_id,
+            content,
+            visibility,
+            published_at,
+            created_at
+        )
+        SELECT
+          p.id AS post_id,
+          p.content,
+          p.visibility,
+          p.published_at,
+          p.created_at,
+          u.id AS author_id,
+          u.username,
+          u.display_name,
+          u.avatar_storage_key,
+          COALESCE(s.likes_count, 0) AS likes_count,
+          COALESCE(s.comments_count, 0) AS comments_count,
+          COALESCE(s.reposts_count, 0) AS reposts_count,
+          EXISTS (
+            SELECT 1
+            FROM public.post_likes AS pl
+            WHERE pl.post_id = p.id
+              AND pl.user_id = @userId
+          ) AS is_liked
+        FROM updated_post AS p
+        JOIN public.users AS u ON u.id = p.user_id
+        LEFT JOIN public.post_stats AS s ON s.post_id = p.id
+        LIMIT 1
+      '''),
+      parameters: {
+        'postId': postId,
+        'userId': userId,
+        'content': content,
+      },
+    );
+
+    if (result.isEmpty) return null;
+
+    return _mapPost(result.first.toColumnMap());
+  }
+
+  /// Soft-deletes a post owned by the specified user.
+  ///
+  /// Returns false when the post does not exist or is not owned by the user.
+  Future<bool> deletePost({
+    required int postId,
+    required int userId,
+  }) async {
+    final result = await database.execute(
+      Sql.named('''
+        UPDATE public.posts
+        SET
+          deleted_at = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = @postId
+          AND user_id = @userId
+          AND deleted_at IS NULL
+        RETURNING id
+      '''),
+      parameters: {
+        'postId': postId,
+        'userId': userId,
+      },
+    );
+
+    return result.isNotEmpty;
+  }
+
   /// Adds or removes a user's like and returns the resulting state.
   ///
   /// Returns null when the post is not available to the current user.
