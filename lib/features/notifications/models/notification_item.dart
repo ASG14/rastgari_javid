@@ -2,9 +2,9 @@ class NotificationItem {
   const NotificationItem({
     required this.id,
     required this.type,
-    required this.postId,
     required this.createdAt,
     required this.isRead,
+    this.postId,
     this.commentId,
     this.readAt,
     this.actorId,
@@ -15,7 +15,7 @@ class NotificationItem {
 
   final String id;
   final String type;
-  final int postId;
+  final int? postId;
   final int? commentId;
   final DateTime createdAt;
   final DateTime? readAt;
@@ -27,11 +27,13 @@ class NotificationItem {
 
   String get actorName {
     final displayName = actorDisplayName?.trim();
+
     if (displayName != null && displayName.isNotEmpty) {
       return displayName;
     }
 
     final username = actorUsername?.trim();
+
     if (username != null && username.isNotEmpty) {
       return username;
     }
@@ -43,10 +45,22 @@ class NotificationItem {
     switch (type) {
       case 'post_like':
         return '$actorName با پست شما همدلی کرد.';
+
       case 'post_comment':
         return '$actorName برای پست شما دیدگاهی نوشت.';
+
       case 'comment_reply':
         return '$actorName به دیدگاه شما پاسخ داد.';
+
+      case 'user_follow':
+        return '$actorName شما را دنبال کرد.';
+
+      case 'follow_request':
+        return '$actorName درخواست دنبال‌کردن شما را فرستاد.';
+
+      case 'follow_request_accepted':
+        return '$actorName درخواست دنبال‌کردن شما را پذیرفت.';
+
       default:
         return '$actorName اعلان جدیدی برای شما فرستاد.';
     }
@@ -54,6 +68,7 @@ class NotificationItem {
 
   factory NotificationItem.fromJson(Map<String, dynamic> json) {
     final actorValue = json['actor'];
+
     final actor = actorValue is Map
         ? Map<String, dynamic>.from(actorValue)
         : <String, dynamic>{};
@@ -72,15 +87,12 @@ class NotificationItem {
       throw const FormatException('نوع اعلان در پاسخ سرور وجود ندارد.');
     }
 
-    if (postId == null) {
-      throw const FormatException('شناسه پست در پاسخ اعلان معتبر نیست.');
-    }
-
     if (createdAt == null) {
       throw const FormatException('زمان ایجاد اعلان در پاسخ سرور معتبر نیست.');
     }
 
     final readAtValue = json['read_at'];
+
     final readAt = readAtValue == null
         ? null
         : DateTime.tryParse(_stringValue(readAtValue));
@@ -117,23 +129,32 @@ class NotificationItem {
 
   static String? _nullableString(dynamic value) {
     if (value == null) return null;
+
     final result = value.toString();
+
     return result.isEmpty ? null : result;
   }
 
   static int? _intValue(dynamic value) {
     if (value is int) return value;
+    if (value is BigInt) return value.toInt();
     if (value is num) return value.toInt();
-    if (value is String) return int.tryParse(value);
+
+    if (value is String) {
+      return int.tryParse(value);
+    }
+
     return null;
   }
 
   static bool _boolValue(dynamic value) {
     if (value is bool) return value;
     if (value is num) return value != 0;
+
     if (value is String) {
       return value.toLowerCase() == 'true' || value == '1';
     }
+
     return false;
   }
 }

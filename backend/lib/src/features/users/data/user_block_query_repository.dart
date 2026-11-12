@@ -1,4 +1,3 @@
-
 import 'package:backend/src/core/database/database_pool.dart';
 import 'package:postgres/postgres.dart';
 
@@ -12,7 +11,7 @@ class UserBlockQueryRepository {
   }) async {
     final countResult = await database.execute(
       Sql.named('''
-        SELECT COUNT(*)
+        SELECT COUNT(*) AS total
         FROM public.user_blocks ub
         INNER JOIN public.users u
           ON u.id = ub.blocked_user_id
@@ -23,7 +22,7 @@ class UserBlockQueryRepository {
       parameters: {'userId': userId},
     );
 
-    final total = countResult.first[0] as int;
+    final total = _toInt(countResult.first.toColumnMap()['total']);
 
     final result = await database.execute(
       Sql.named('''
@@ -62,5 +61,13 @@ class UserBlockQueryRepository {
         'has_more': offset + items.length < total,
       },
     };
+  }
+
+  int _toInt(dynamic value) {
+    if (value is int) return value;
+    if (value is BigInt) return value.toInt();
+    if (value is num) return value.toInt();
+
+    return int.parse(value.toString());
   }
 }

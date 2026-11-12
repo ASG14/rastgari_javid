@@ -114,9 +114,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             .toList();
 
       case _NotificationFilter.friends:
-        // تا زمانی که نوع اعلان دوستی در بک‌اند اضافه نشده،
-        // این فیلتر نتیجه‌ای ندارد.
-        return [];
+        return _notifications
+            .where(
+              (item) =>
+                  item.type == 'user_follow' ||
+                  item.type == 'follow_request' ||
+                  item.type == 'follow_request_accepted',
+            )
+            .toList();
     }
   }
 
@@ -299,7 +304,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         _NotificationFilter.all => 'اعلانی نداری.',
         _NotificationFilter.empathy => 'اعلان همدلی‌ای وجود ندارد.',
         _NotificationFilter.conversations => 'اعلان گفتگویی وجود ندارد.',
-        _NotificationFilter.friends => 'اعلان‌های دوستی هنوز فعال نشده‌اند.',
+        _NotificationFilter.friends => 'اعلان مربوط به دوستی وجود ندارد.',
       };
 
       return ListView(

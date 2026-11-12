@@ -74,10 +74,22 @@ class NotificationCard extends StatelessWidget {
     switch (type) {
       case 'post_like':
         return Icons.favorite_outline;
+
       case 'post_comment':
         return Icons.mode_comment_outlined;
+
       case 'comment_reply':
         return Icons.reply_rounded;
+
+      case 'user_follow':
+        return Icons.person_add_alt_1_outlined;
+
+      case 'follow_request':
+        return Icons.person_add_outlined;
+
+      case 'follow_request_accepted':
+        return Icons.how_to_reg_outlined;
+
       default:
         return Icons.notifications_outlined;
     }
