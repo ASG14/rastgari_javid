@@ -1,11 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../auth/data/auth_repository.dart';
 import '../../../auth/models/auth_user.dart';
+import '../../../comments/presentation/screens/post_comments_screen.dart';
 import '../../data/posts_repository.dart';
 import '../../models/post.dart';
 import '../widgets/post_card.dart';
-import '../../../comments/presentation/screens/post_comments_screen.dart';
 
 class PostFeedScreen extends StatefulWidget {
   const PostFeedScreen({
@@ -23,39 +25,149 @@ class PostFeedScreen extends StatefulWidget {
 
 class _PostFeedScreenState extends State<PostFeedScreen> {
   final PostsRepository _postsRepository = PostsRepository();
+  final ScrollController _scrollController = ScrollController();
+
+  static const int _pageSize = 20;
+  static const double _loadMoreThreshold = 500;
 
   List<Post> _posts = [];
+
   bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+
+  String? _nextCursor;
   String? _errorMessage;
+  String? _loadMoreErrorMessage;
+
+  // Identifies the current feed request generation.
+  // Responses from older generations are ignored.
+  int _requestGeneration = 0;
 
   @override
   void initState() {
     super.initState();
+
+    _scrollController.addListener(_handleScroll);
     _loadPosts();
   }
 
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_handleScroll)
+      ..dispose();
+
+    super.dispose();
+  }
+
+  void _handleScroll() {
+    if (!_scrollController.hasClients) return;
+
+    if (_scrollController.position.extentAfter < _loadMoreThreshold) {
+      unawaited(_loadMorePosts());
+    }
+  }
+
+  void _scheduleLoadMoreIfNeeded() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _handleScroll();
+    });
+  }
+
   Future<void> _loadPosts() async {
+    final requestGeneration = ++_requestGeneration;
+
     setState(() {
       _isLoading = true;
+      _isLoadingMore = false;
+      _hasMore = true;
+      _nextCursor = null;
       _errorMessage = null;
+      _loadMoreErrorMessage = null;
     });
 
     try {
       final token = await widget.authRepository.readAccessToken();
-      final posts = await _postsRepository.getPublicPosts(token: token);
 
-      if (!mounted) return;
+      final page = await _postsRepository.getPublicPosts(
+        token: token,
+        limit: _pageSize,
+      );
+
+      if (!mounted || requestGeneration != _requestGeneration) return;
 
       setState(() {
-        _posts = posts;
+        _posts = page.posts;
+        _hasMore = page.hasMore;
+        _nextCursor = page.nextCursor;
         _isLoading = false;
       });
+
+      _scheduleLoadMoreIfNeeded();
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || requestGeneration != _requestGeneration) return;
 
       setState(() {
         _errorMessage = error.toString();
         _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadMorePosts() async {
+    if (_isLoading ||
+        _isLoadingMore ||
+        !_hasMore ||
+        _nextCursor == null ||
+        _errorMessage != null) {
+      return;
+    }
+
+    final requestGeneration = _requestGeneration;
+    final requestedCursor = _nextCursor!;
+
+    setState(() {
+      _isLoadingMore = true;
+      _loadMoreErrorMessage = null;
+    });
+
+    try {
+      final token = await widget.authRepository.readAccessToken();
+
+      final page = await _postsRepository.getPublicPosts(
+        token: token,
+        limit: _pageSize,
+        cursor: requestedCursor,
+      );
+
+      if (!mounted || requestGeneration != _requestGeneration) return;
+
+      if (page.hasMore && page.nextCursor == requestedCursor) {
+        throw const FormatException(
+          'نشانگر صفحه بعد تغییر نکرده است؛ برای جلوگیری از بارگذاری تکراری، درخواست متوقف شد.',
+        );
+      }
+
+      setState(() {
+        final existingIds = _posts.map((post) => post.id).toSet();
+
+        final newPosts = page.posts.where((post) => existingIds.add(post.id));
+
+        _posts = [..._posts, ...newPosts];
+        _hasMore = page.hasMore;
+        _nextCursor = page.nextCursor;
+        _isLoadingMore = false;
+      });
+
+      _scheduleLoadMoreIfNeeded();
+    } catch (error) {
+      if (!mounted || requestGeneration != _requestGeneration) return;
+
+      setState(() {
+        _loadMoreErrorMessage = error.toString();
+        _isLoadingMore = false;
       });
     }
   }
@@ -103,6 +215,62 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
     });
   }
 
+  Widget _buildPaginationFooter(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    if (_isLoadingMore) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_loadMoreErrorMessage != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          children: [
+            Text(
+              'دریافت نوشته‌های بعدی ناموفق بود.',
+              style: theme.textTheme.bodyMedium?.copyWith(color: colors.error),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _loadMorePosts,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('تلاش مجدد'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_hasMore) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: OutlinedButton(
+            onPressed: _loadMorePosts,
+            child: const Text('بارگذاری نوشته‌های بیشتر'),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Center(
+        child: Text(
+          'به پایان نوشته‌ها رسیدید',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: colors.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -113,6 +281,7 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
       child: RefreshIndicator(
         onRefresh: _loadPosts,
         child: ListView(
+          controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
@@ -153,12 +322,14 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
               _buildErrorState(context)
             else if (_posts.isEmpty)
               _buildEmptyState(context)
-            else
+            else ...[
               for (final post in _posts)
                 PostCard(
                   key: ValueKey(post.id),
                   post: post,
-                  onLikeChanged: (isLiked) => _handleLikeChanged(post, isLiked),
+                  onLikeChanged: (isLiked) {
+                    return _handleLikeChanged(post, isLiked);
+                  },
                   onCommentsTap: () async {
                     await Navigator.of(context).push<bool>(
                       MaterialPageRoute<bool>(
@@ -183,16 +354,7 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
                     );
                   },
                 ),
-            if (!_isLoading && _errorMessage == null && _posts.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Center(
-                child: Text(
-                  'پایان نوشته‌های دریافت‌شده',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: colors.onSurfaceVariant,
-                  ),
-                ),
-              ),
+              _buildPaginationFooter(context),
             ],
           ],
         ),

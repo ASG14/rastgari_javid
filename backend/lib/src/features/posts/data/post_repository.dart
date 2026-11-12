@@ -3,10 +3,118 @@ import 'package:postgres/postgres.dart';
 
 /// Provides database operations for posts and post interactions.
 class PostRepository {
-  /// Retrieves the latest public posts and their author, statistics,
-  /// and optional current-user like state.
-  Future<List<Map<String, dynamic>>> getPublicPosts({
+  /// Retrieves posts visible to the current user.
+  ///
+  /// Retrieves a single post if it is visible to the current user.
+  ///
+  /// Returns null when the post does not exist or access is denied.
+  Future<Map<String, dynamic>?> getPostById({
+    required int postId,
     int? currentUserId,
+  }) async {
+    final result = await database.execute(
+      Sql.named('''
+        SELECT
+          p.id AS post_id,
+          p.content,
+          p.visibility,
+          p.published_at,
+          p.created_at,
+          u.id AS author_id,
+          u.username,
+          u.display_name,
+          u.avatar_storage_key,
+          COALESCE(s.likes_count, 0) AS likes_count,
+          COALESCE(s.comments_count, 0) AS comments_count,
+          COALESCE(s.reposts_count, 0) AS reposts_count,
+          CASE
+            WHEN CAST(@currentUserId AS BIGINT) IS NULL THEN FALSE
+            ELSE EXISTS (
+              SELECT 1
+              FROM public.post_likes AS pl
+              WHERE pl.post_id = p.id
+                AND pl.user_id = CAST(@currentUserId AS BIGINT)
+            )
+          END AS is_liked
+        FROM public.posts AS p
+        JOIN public.users AS u ON u.id = p.user_id
+        LEFT JOIN public.post_stats AS s ON s.post_id = p.id
+        WHERE p.id = @postId
+          AND p.status = 'published'
+          AND p.deleted_at IS NULL
+          AND u.status = 'active'
+          AND u.deleted_at IS NULL
+
+          AND (
+            p.user_id = CAST(@currentUserId AS BIGINT)
+
+            OR (
+              p.visibility = 'public'
+              AND (
+                u.is_private = FALSE
+                OR EXISTS (
+                  SELECT 1
+                  FROM public.user_follows AS uf
+                  WHERE uf.follower_user_id =
+                    CAST(@currentUserId AS BIGINT)
+                    AND uf.following_user_id = u.id
+                )
+              )
+            )
+
+            OR (
+              p.visibility = 'followers'
+              AND EXISTS (
+                SELECT 1
+                FROM public.user_follows AS uf
+                WHERE uf.follower_user_id =
+                  CAST(@currentUserId AS BIGINT)
+                  AND uf.following_user_id = u.id
+              )
+            )
+          )
+
+          AND (
+            CAST(@currentUserId AS BIGINT) IS NULL
+            OR NOT EXISTS (
+              SELECT 1
+              FROM public.user_blocks AS b
+              WHERE (
+                b.blocker_user_id = CAST(@currentUserId AS BIGINT)
+                AND b.blocked_user_id = u.id
+              )
+              OR (
+                b.blocker_user_id = u.id
+                AND b.blocked_user_id = CAST(@currentUserId AS BIGINT)
+              )
+            )
+          )
+        LIMIT 1
+      '''),
+      parameters: {
+        'postId': postId,
+        'currentUserId': currentUserId,
+      },
+    );
+
+    if (result.isEmpty) return null;
+
+    return _mapPost(result.first.toColumnMap());
+  }
+
+  /// Public posts from public accounts are visible to everyone.
+  /// Posts from private accounts are visible only to accepted followers.
+  /// Followers-only posts are visible to followers and their author.
+  /// Private posts are visible only to their author.
+  /// Retrieves a page of posts visible to the current user.
+  ///
+  /// Fetches one extra row to determine whether another page exists.
+  Future<List<Map<String, dynamic>>> getPublicPosts({
+    required bool cursorPublishedAtIsNull,
+    required int limit,
+    int? currentUserId,
+    int? cursorPostId,
+    DateTime? cursorPublishedAt,
   }) async {
     final result = await database.execute(
       Sql.named('''
@@ -37,14 +145,168 @@ class PostRepository {
         LEFT JOIN public.post_stats AS s ON s.post_id = p.id
         WHERE
           p.status = 'published'
-          AND p.visibility = 'public'
           AND p.deleted_at IS NULL
           AND u.deleted_at IS NULL
           AND u.status = 'active'
+
+          AND (
+            p.user_id = CAST(@currentUserId AS BIGINT)
+
+            OR (
+              p.visibility = 'public'
+              AND (
+                u.is_private = FALSE
+                OR EXISTS (
+                  SELECT 1
+                  FROM public.user_follows AS uf
+                  WHERE uf.follower_user_id =
+                    CAST(@currentUserId AS BIGINT)
+                    AND uf.following_user_id = u.id
+                )
+              )
+            )
+
+            OR (
+              p.visibility = 'followers'
+              AND EXISTS (
+                SELECT 1
+                FROM public.user_follows AS uf
+                WHERE uf.follower_user_id =
+                  CAST(@currentUserId AS BIGINT)
+                  AND uf.following_user_id = u.id
+              )
+            )
+          )
+
+          AND (
+            CAST(@currentUserId AS BIGINT) IS NULL
+            OR NOT EXISTS (
+              SELECT 1
+              FROM public.user_blocks AS b
+              WHERE (
+                b.blocker_user_id = CAST(@currentUserId AS BIGINT)
+                AND b.blocked_user_id = u.id
+              )
+              OR (
+                b.blocker_user_id = u.id
+                AND b.blocked_user_id = CAST(@currentUserId AS BIGINT)
+              )
+            )
+          )
+
+          AND (
+            CAST(@cursorPostId AS BIGINT) IS NULL
+
+            OR (
+              @cursorPublishedAtIsNull = FALSE
+              AND (
+                p.published_at IS NULL
+                OR p.published_at < @cursorPublishedAt
+                OR (
+                  p.published_at = @cursorPublishedAt
+                  AND p.id < CAST(@cursorPostId AS BIGINT)
+                )
+              )
+            )
+
+            OR (
+              @cursorPublishedAtIsNull = TRUE
+              AND p.published_at IS NULL
+              AND p.id < CAST(@cursorPostId AS BIGINT)
+            )
+          )
+
         ORDER BY p.published_at DESC NULLS LAST, p.id DESC
-        LIMIT 50
+        LIMIT @fetchLimit
       '''),
-      parameters: {'currentUserId': currentUserId},
+      parameters: {
+        'currentUserId': currentUserId,
+        'cursorPostId': cursorPostId,
+        'cursorPublishedAt': cursorPublishedAt,
+        'cursorPublishedAtIsNull': cursorPublishedAtIsNull,
+        'fetchLimit': limit + 1,
+      },
+    );
+
+    return result.map((row) {
+      return _mapPost(row.toColumnMap());
+    }).toList();
+  }
+
+  /// Retrieves a paginated list of published posts owned by a user.
+  ///
+  /// Includes all visibility levels because the authenticated user
+  /// is viewing their own posts.
+  Future<List<Map<String, dynamic>>> getOwnPosts({
+    required int userId,
+    required int limit,
+    int? cursorPostId,
+    DateTime? cursorPublishedAt,
+    required bool cursorPublishedAtIsNull,
+  }) async {
+    final result = await database.execute(
+      Sql.named('''
+      SELECT
+        p.id AS post_id,
+        p.content,
+        p.visibility,
+        p.published_at,
+        p.created_at,
+        u.id AS author_id,
+        u.username,
+        u.display_name,
+        u.avatar_storage_key,
+        COALESCE(s.likes_count, 0) AS likes_count,
+        COALESCE(s.comments_count, 0) AS comments_count,
+        COALESCE(s.reposts_count, 0) AS reposts_count,
+        EXISTS (
+          SELECT 1
+          FROM public.post_likes AS pl
+          WHERE pl.post_id = p.id
+            AND pl.user_id = @userId
+        ) AS is_liked
+      FROM public.posts AS p
+      JOIN public.users AS u ON u.id = p.user_id
+      LEFT JOIN public.post_stats AS s ON s.post_id = p.id
+      WHERE
+        p.user_id = @userId
+        AND p.status = 'published'
+        AND p.deleted_at IS NULL
+        AND u.status = 'active'
+        AND u.deleted_at IS NULL
+
+        AND (
+          CAST(@cursorPostId AS BIGINT) IS NULL
+
+          OR (
+            @cursorPublishedAtIsNull = FALSE
+            AND (
+              p.published_at IS NULL
+              OR p.published_at < @cursorPublishedAt
+              OR (
+                p.published_at = @cursorPublishedAt
+                AND p.id < CAST(@cursorPostId AS BIGINT)
+              )
+            )
+          )
+
+          OR (
+            @cursorPublishedAtIsNull = TRUE
+            AND p.published_at IS NULL
+            AND p.id < CAST(@cursorPostId AS BIGINT)
+          )
+        )
+
+      ORDER BY p.published_at DESC NULLS LAST, p.id DESC
+      LIMIT @fetchLimit
+    '''),
+      parameters: {
+        'userId': userId,
+        'cursorPostId': cursorPostId,
+        'cursorPublishedAt': cursorPublishedAt,
+        'cursorPublishedAtIsNull': cursorPublishedAtIsNull,
+        'fetchLimit': limit + 1,
+      },
     );
 
     return result.map((row) {
@@ -53,6 +315,9 @@ class PostRepository {
   }
 
   /// Creates a public post and its initial statistics in one SQL statement.
+  ///
+  /// Account privacy is enforced when posts are retrieved, not by changing
+  /// the post's visibility value.
   Future<Map<String, dynamic>> createPublicPost({
     required int userId,
     required String content,
@@ -120,9 +385,99 @@ class PostRepository {
     return _mapPost(result.first.toColumnMap());
   }
 
+  /// Updates a published post owned by the specified user.
+  ///
+  /// Returns null when the post does not exist or is not owned by the user.
+  Future<Map<String, dynamic>?> updatePost({
+    required int postId,
+    required int userId,
+    required String content,
+  }) async {
+    final result = await database.execute(
+      Sql.named('''
+        WITH updated_post AS (
+          UPDATE public.posts
+          SET
+            content = @content,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = @postId
+            AND user_id = @userId
+            AND status = 'published'
+            AND deleted_at IS NULL
+          RETURNING
+            id,
+            user_id,
+            content,
+            visibility,
+            published_at,
+            created_at
+        )
+        SELECT
+          p.id AS post_id,
+          p.content,
+          p.visibility,
+          p.published_at,
+          p.created_at,
+          u.id AS author_id,
+          u.username,
+          u.display_name,
+          u.avatar_storage_key,
+          COALESCE(s.likes_count, 0) AS likes_count,
+          COALESCE(s.comments_count, 0) AS comments_count,
+          COALESCE(s.reposts_count, 0) AS reposts_count,
+          EXISTS (
+            SELECT 1
+            FROM public.post_likes AS pl
+            WHERE pl.post_id = p.id
+              AND pl.user_id = @userId
+          ) AS is_liked
+        FROM updated_post AS p
+        JOIN public.users AS u ON u.id = p.user_id
+        LEFT JOIN public.post_stats AS s ON s.post_id = p.id
+        LIMIT 1
+      '''),
+      parameters: {
+        'postId': postId,
+        'userId': userId,
+        'content': content,
+      },
+    );
+
+    if (result.isEmpty) return null;
+
+    return _mapPost(result.first.toColumnMap());
+  }
+
+  /// Soft-deletes a post owned by the specified user.
+  ///
+  /// Returns false when the post does not exist or is not owned by the user.
+  Future<bool> deletePost({
+    required int postId,
+    required int userId,
+  }) async {
+    final result = await database.execute(
+      Sql.named('''
+        UPDATE public.posts
+        SET
+          deleted_at = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = @postId
+          AND user_id = @userId
+          AND deleted_at IS NULL
+        RETURNING id
+      '''),
+      parameters: {
+        'postId': postId,
+        'userId': userId,
+      },
+    );
+
+    return result.isNotEmpty;
+  }
+
   /// Adds or removes a user's like and returns the resulting state.
   ///
-  /// Returns null when the post is not available for public interaction.
+  /// Returns null when the post is not available to the current user.
   Future<Map<String, dynamic>?> setPostLike({
     required int postId,
     required int userId,
@@ -138,13 +493,56 @@ class PostRepository {
           JOIN public.users AS u ON u.id = p.user_id
           WHERE p.id = @postId
             AND p.status = 'published'
-            AND p.visibility = 'public'
             AND p.deleted_at IS NULL
             AND u.status = 'active'
             AND u.deleted_at IS NULL
+
+            AND (
+              p.user_id = @userId
+
+              OR (
+                p.visibility = 'public'
+                AND (
+                  u.is_private = FALSE
+                  OR EXISTS (
+                    SELECT 1
+                    FROM public.user_follows AS uf
+                    WHERE uf.follower_user_id = @userId
+                      AND uf.following_user_id = u.id
+                  )
+                )
+              )
+
+              OR (
+                p.visibility = 'followers'
+                AND EXISTS (
+                  SELECT 1
+                  FROM public.user_follows AS uf
+                  WHERE uf.follower_user_id = @userId
+                    AND uf.following_user_id = u.id
+                )
+              )
+            )
+
+            AND NOT EXISTS (
+              SELECT 1
+              FROM public.user_blocks AS b
+              WHERE (
+                b.blocker_user_id = @userId
+                AND b.blocked_user_id = u.id
+              )
+              OR (
+                b.blocker_user_id = u.id
+                AND b.blocked_user_id = @userId
+              )
+            )
+
           LIMIT 1
         '''),
-        parameters: {'postId': postId},
+        parameters: {
+          'postId': postId,
+          'userId': userId,
+        },
       );
 
       if (postResult.isEmpty) {
@@ -165,21 +563,19 @@ class PostRepository {
           },
         );
 
-        // Only increment the counter when a new like was inserted.
-        // Only increment the counter when a new like was inserted.
         if (insertResult.isNotEmpty) {
           await session.execute(
             Sql.named('''
-      INSERT INTO public.post_stats (
-        post_id,
-        likes_count,
-        updated_at
-      )
-      VALUES (@postId, 1, CURRENT_TIMESTAMP)
-      ON CONFLICT (post_id) DO UPDATE
-      SET likes_count = public.post_stats.likes_count + 1,
-          updated_at = CURRENT_TIMESTAMP
-    '''),
+              INSERT INTO public.post_stats (
+                post_id,
+                likes_count,
+                updated_at
+              )
+              VALUES (@postId, 1, CURRENT_TIMESTAMP)
+              ON CONFLICT (post_id) DO UPDATE
+              SET likes_count = public.post_stats.likes_count + 1,
+                  updated_at = CURRENT_TIMESTAMP
+            '''),
             parameters: {'postId': postId},
           );
 
@@ -189,19 +585,19 @@ class PostRepository {
           if (postAuthorId != userId) {
             await session.execute(
               Sql.named('''
-        INSERT INTO public.notifications (
-          recipient_user_id,
-          actor_user_id,
-          notification_type,
-          post_id
-        )
-        VALUES (
-          @recipientUserId,
-          @actorUserId,
-          'post_like',
-          @postId
-        )
-      '''),
+                INSERT INTO public.notifications (
+                  recipient_user_id,
+                  actor_user_id,
+                  notification_type,
+                  post_id
+                )
+                VALUES (
+                  @recipientUserId,
+                  @actorUserId,
+                  'post_like',
+                  @postId
+                )
+              '''),
               parameters: {
                 'recipientUserId': postAuthorId,
                 'actorUserId': userId,
@@ -224,7 +620,6 @@ class PostRepository {
           },
         );
 
-        // Only decrement when an existing like was actually removed.
         if (deleteResult.isNotEmpty) {
           await session.execute(
             Sql.named('''
