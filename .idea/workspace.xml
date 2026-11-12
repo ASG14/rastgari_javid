@@ -10,10 +10,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="d2b03288-1152-483a-a228-998f50e620bb" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/backend/lib/src/features/comments/application/comment_service.dart" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/lib/src/features/comments/data/comment_repository.dart" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/routes/posts/[postId]/comments.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/libraries/Dart_SDK.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/libraries/Dart_SDK.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/android/app/src/main/AndroidManifest.xml" beforeDir="false" afterPath="$PROJECT_DIR$/android/app/src/main/AndroidManifest.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/routes/users/follow-requests/[id]/[id].dart" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/rastgari_javid.iml" beforeDir="false" afterPath="$PROJECT_DIR$/rastgari_javid.iml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -47,21 +47,21 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {
-    "state": "OPEN",
-    "assignee": "ASG14"
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;ASG14&quot;
   }
-}]]></component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/ASG14/rastgari_javid.git",
-    "accountId": "79be81bc-1292-4d5d-94b8-5822c737b520"
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/ASG14/rastgari_javid.git&quot;,
+    &quot;accountId&quot;: &quot;79be81bc-1292-4d5d-94b8-5822c737b520&quot;
   }
-}]]></component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 7
-}]]></component>
+}</component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 7
+}</component>
   <component name="ProjectId" id="3LVW4iooyUeN54Qxr1fBa0fUqlX" />
   <component name="ProjectLevelVcsManager">
     <ConfirmationsSetting value="2" id="Add" />
@@ -91,10 +91,10 @@
     "cidr.known.project.marker": "true",
     "com.google.services.firebase.aqiPopupShown": "true",
     "dart.analysis.tool.window.visible": "false",
-    "git-widget-placeholder": "main",
+    "git-widget-placeholder": "feat/user-profile-foundation",
     "io.flutter.project.isFirstOpen": "true",
     "kotlin-language-version-configured": "true",
-    "last_opened_file_path": "D:/projects/rastgari_javid",
+    "last_opened_file_path": "D:/Projects/Apps/rastgari_javid",
     "show.migrate.to.gradle.popup": "false"
   }
 }]]></component>
