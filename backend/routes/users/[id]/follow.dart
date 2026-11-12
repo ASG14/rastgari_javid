@@ -1,3 +1,4 @@
+
 import 'dart:developer' as developer;
 
 import 'package:backend/src/features/auth/application/auth_service.dart';
@@ -15,7 +16,9 @@ Future<Response> onRequest(
   RequestContext context,
   String id,
 ) async {
-  if (context.request.method.value != 'POST') {
+  final method = context.request.method.value;
+
+  if (method != 'POST' && method != 'DELETE') {
     return Response.json(
       statusCode: 405,
       body: {'error': 'این متد پشتیبانی نمی‌شود.'},
@@ -64,10 +67,15 @@ Future<Response> onRequest(
       );
     }
 
-    final result = await _relationshipService.followUser(
-      actorUserId: actorUserId,
-      targetUserId: targetUserId,
-    );
+    final result = method == 'POST'
+        ? await _relationshipService.followUser(
+            actorUserId: actorUserId,
+            targetUserId: targetUserId,
+          )
+        : await _relationshipService.unfollowUser(
+            actorUserId: actorUserId,
+            targetUserId: targetUserId,
+          );
 
     return Response.json(body: result);
   } on AuthException catch (error) {
@@ -82,7 +90,7 @@ Future<Response> onRequest(
     );
   } catch (error, stackTrace) {
     developer.log(
-      'Follow user request failed',
+      'User follow relationship request failed',
       error: error,
       stackTrace: stackTrace,
       name: 'users.follow',
@@ -90,7 +98,11 @@ Future<Response> onRequest(
 
     return Response.json(
       statusCode: 500,
-      body: {'error': 'در انجام عملیات دنبال کردن کاربر خطایی رخ داد.'},
+      body: {
+        'error': method == 'POST'
+            ? 'در انجام عملیات دنبال کردن کاربر خطایی رخ داد.'
+            : 'در لغو دنبال‌کردن کاربر خطایی رخ داد.',
+      },
     );
   }
 }

@@ -216,10 +216,88 @@ class UserRelationshipRepository {
     });
   }
 
-  /// Accepts a pending follow request.
+
+  /// Removes the authenticated user's follow relationship with another user.
   ///
-  /// The target user must be the authenticated user.
-  /// Both accounts are locked before the request row is locked.
+  /// Both accounts are locked in ascending ID order to serialize
+  /// concurrent relationship operations.
+  Future<Map<String, dynamic>> unfollowUser({
+    required int actorUserId,
+    required int targetUserId,
+  }) {
+    if (actorUserId < 1 || targetUserId < 1) {
+      throw ArgumentError('User IDs must be positive.');
+    }
+
+    if (actorUserId == targetUserId) {
+      throw ArgumentError('A user cannot unfollow themselves.');
+    }
+
+    return database.runTx((session) async {
+      final users = await _lockUsers(
+        session,
+        firstUserId: actorUserId,
+        secondUserId: targetUserId,
+      );
+
+      final actor = users[actorUserId];
+      final target = users[targetUserId];
+
+      if (actor == null || !_isActive(actor)) {
+        return {'status': 'actor_not_found'};
+      }
+
+      if (target == null || !_isActive(target)) {
+        return {'status': 'target_not_found'};
+      }
+
+      final blockResult = await session.execute(
+        Sql.named('''
+          SELECT EXISTS (
+            SELECT 1
+            FROM public.user_blocks
+            WHERE (
+              blocker_user_id = @actorUserId
+              AND blocked_user_id = @targetUserId
+            )
+            OR (
+              blocker_user_id = @targetUserId
+              AND blocked_user_id = @actorUserId
+            )
+          )
+        '''),
+        parameters: {
+          'actorUserId': actorUserId,
+          'targetUserId': targetUserId,
+        },
+      );
+
+      if (blockResult.first[0] == true) {
+        return {'status': 'blocked'};
+      }
+
+      final result = await session.execute(
+        Sql.named('''
+          DELETE FROM public.user_follows
+          WHERE follower_user_id = @actorUserId
+            AND following_user_id = @targetUserId
+          RETURNING follower_user_id
+        '''),
+        parameters: {
+          'actorUserId': actorUserId,
+          'targetUserId': targetUserId,
+        },
+      );
+
+      if (result.isEmpty) {
+        return {'status': 'not_following'};
+      }
+
+      return {'status': 'unfollowed'};
+    });
+  }
+
+ 
   Future<Map<String, dynamic>> acceptFollowRequest({
     required int requestId,
     required int targetUserId,

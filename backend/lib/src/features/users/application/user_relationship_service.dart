@@ -117,7 +117,76 @@ class UserRelationshipService {
     }
   }
 
-  /// Accepts a follow request received by the authenticated user.
+  /// Removes the authenticated user's follow relationship with another user.
+
+  /// Removes the authenticated user's follow relationship with another user.
+  Future<Map<String, dynamic>> unfollowUser({
+    required int actorUserId,
+    required int targetUserId,
+  }) async {
+    if (actorUserId < 1) {
+      throw const UserRelationshipException(
+        'کاربر احراز هویت نشده است.',
+        statusCode: 401,
+      );
+    }
+
+    if (targetUserId < 1) {
+      throw const UserRelationshipException(
+        'شناسه کاربر مقصد معتبر نیست.',
+      );
+    }
+
+    if (actorUserId == targetUserId) {
+      throw const UserRelationshipException(
+        'امکان لغو دنبال‌کردن حساب خودتان وجود ندارد.',
+      );
+    }
+
+    final result = await _repository.unfollowUser(
+      actorUserId: actorUserId,
+      targetUserId: targetUserId,
+    );
+
+    switch (result['status']) {
+      case 'unfollowed':
+        return {
+          'status': 'unfollowed',
+          'message': 'دنبال‌کردن این کاربر لغو شد.',
+        };
+
+      case 'not_following':
+        return {
+          'status': 'not_following',
+          'message': 'شما در حال حاضر این کاربر را دنبال نمی‌کنید.',
+        };
+
+      case 'actor_not_found':
+        throw const UserRelationshipException(
+          'حساب کاربری شما معتبر یا فعال نیست.',
+          statusCode: 401,
+        );
+
+      case 'target_not_found':
+        throw const UserRelationshipException(
+          'کاربر موردنظر یافت نشد یا حساب او فعال نیست.',
+          statusCode: 404,
+        );
+
+      case 'blocked':
+        throw const UserRelationshipException(
+          'به دلیل محدودیت ارتباطی، امکان انجام این عملیات وجود ندارد.',
+          statusCode: 403,
+        );
+
+      default:
+        throw const UserRelationshipException(
+          'در لغو دنبال‌کردن کاربر خطایی رخ داد.',
+          statusCode: 500,
+        );
+    }
+  }
+
   Future<Map<String, dynamic>> acceptFollowRequest({
     required int targetUserId,
     required int requestId,
