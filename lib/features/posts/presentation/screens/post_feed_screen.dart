@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../../../auth/data/auth_repository.dart';
 import '../../../auth/models/auth_user.dart';
+import '../../../comments/presentation/screens/post_comments_screen.dart';
 import '../../data/posts_repository.dart';
 import '../../models/post.dart';
 import '../widgets/post_card.dart';
-import '../../../comments/presentation/screens/post_comments_screen.dart';
 
 class PostFeedScreen extends StatefulWidget {
   const PostFeedScreen({
@@ -28,6 +28,7 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
   final ScrollController _scrollController = ScrollController();
 
   static const int _pageSize = 20;
+  static const double _loadMoreThreshold = 500;
 
   List<Post> _posts = [];
 
@@ -38,6 +39,10 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
   String? _nextCursor;
   String? _errorMessage;
   String? _loadMoreErrorMessage;
+
+  // Identifies the current feed request generation.
+  // Responses from older generations are ignored.
+  int _requestGeneration = 0;
 
   @override
   void initState() {
@@ -59,12 +64,21 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
   void _handleScroll() {
     if (!_scrollController.hasClients) return;
 
-    if (_scrollController.position.extentAfter < 500) {
+    if (_scrollController.position.extentAfter < _loadMoreThreshold) {
       unawaited(_loadMorePosts());
     }
   }
 
+  void _scheduleLoadMoreIfNeeded() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _handleScroll();
+    });
+  }
+
   Future<void> _loadPosts() async {
+    final requestGeneration = ++_requestGeneration;
+
     setState(() {
       _isLoading = true;
       _isLoadingMore = false;
@@ -82,7 +96,7 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
         limit: _pageSize,
       );
 
-      if (!mounted) return;
+      if (!mounted || requestGeneration != _requestGeneration) return;
 
       setState(() {
         _posts = page.posts;
@@ -90,8 +104,10 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
         _nextCursor = page.nextCursor;
         _isLoading = false;
       });
+
+      _scheduleLoadMoreIfNeeded();
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || requestGeneration != _requestGeneration) return;
 
       setState(() {
         _errorMessage = error.toString();
@@ -109,6 +125,9 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
       return;
     }
 
+    final requestGeneration = _requestGeneration;
+    final requestedCursor = _nextCursor!;
+
     setState(() {
       _isLoadingMore = true;
       _loadMoreErrorMessage = null;
@@ -120,10 +139,16 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
       final page = await _postsRepository.getPublicPosts(
         token: token,
         limit: _pageSize,
-        cursor: _nextCursor,
+        cursor: requestedCursor,
       );
 
-      if (!mounted) return;
+      if (!mounted || requestGeneration != _requestGeneration) return;
+
+      if (page.hasMore && page.nextCursor == requestedCursor) {
+        throw const FormatException(
+          'نشانگر صفحه بعد تغییر نکرده است؛ برای جلوگیری از بارگذاری تکراری، درخواست متوقف شد.',
+        );
+      }
 
       setState(() {
         final existingIds = _posts.map((post) => post.id).toSet();
@@ -135,8 +160,10 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
         _nextCursor = page.nextCursor;
         _isLoadingMore = false;
       });
+
+      _scheduleLoadMoreIfNeeded();
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || requestGeneration != _requestGeneration) return;
 
       setState(() {
         _loadMoreErrorMessage = error.toString();

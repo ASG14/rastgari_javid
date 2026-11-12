@@ -233,6 +233,87 @@ class PostRepository {
     }).toList();
   }
 
+  /// Retrieves a paginated list of published posts owned by a user.
+  ///
+  /// Includes all visibility levels because the authenticated user
+  /// is viewing their own posts.
+  Future<List<Map<String, dynamic>>> getOwnPosts({
+    required int userId,
+    required int limit,
+    int? cursorPostId,
+    DateTime? cursorPublishedAt,
+    required bool cursorPublishedAtIsNull,
+  }) async {
+    final result = await database.execute(
+      Sql.named('''
+      SELECT
+        p.id AS post_id,
+        p.content,
+        p.visibility,
+        p.published_at,
+        p.created_at,
+        u.id AS author_id,
+        u.username,
+        u.display_name,
+        u.avatar_storage_key,
+        COALESCE(s.likes_count, 0) AS likes_count,
+        COALESCE(s.comments_count, 0) AS comments_count,
+        COALESCE(s.reposts_count, 0) AS reposts_count,
+        EXISTS (
+          SELECT 1
+          FROM public.post_likes AS pl
+          WHERE pl.post_id = p.id
+            AND pl.user_id = @userId
+        ) AS is_liked
+      FROM public.posts AS p
+      JOIN public.users AS u ON u.id = p.user_id
+      LEFT JOIN public.post_stats AS s ON s.post_id = p.id
+      WHERE
+        p.user_id = @userId
+        AND p.status = 'published'
+        AND p.deleted_at IS NULL
+        AND u.status = 'active'
+        AND u.deleted_at IS NULL
+
+        AND (
+          CAST(@cursorPostId AS BIGINT) IS NULL
+
+          OR (
+            @cursorPublishedAtIsNull = FALSE
+            AND (
+              p.published_at IS NULL
+              OR p.published_at < @cursorPublishedAt
+              OR (
+                p.published_at = @cursorPublishedAt
+                AND p.id < CAST(@cursorPostId AS BIGINT)
+              )
+            )
+          )
+
+          OR (
+            @cursorPublishedAtIsNull = TRUE
+            AND p.published_at IS NULL
+            AND p.id < CAST(@cursorPostId AS BIGINT)
+          )
+        )
+
+      ORDER BY p.published_at DESC NULLS LAST, p.id DESC
+      LIMIT @fetchLimit
+    '''),
+      parameters: {
+        'userId': userId,
+        'cursorPostId': cursorPostId,
+        'cursorPublishedAt': cursorPublishedAt,
+        'cursorPublishedAtIsNull': cursorPublishedAtIsNull,
+        'fetchLimit': limit + 1,
+      },
+    );
+
+    return result.map((row) {
+      return _mapPost(row.toColumnMap());
+    }).toList();
+  }
+
   /// Creates a public post and its initial statistics in one SQL statement.
   ///
   /// Account privacy is enforced when posts are retrieved, not by changing
