@@ -3,8 +3,12 @@ import 'package:postgres/postgres.dart';
 
 /// Provides database operations for posts and post interactions.
 class PostRepository {
-  /// Retrieves the latest public posts and their author, statistics,
-  /// and optional current-user like state.
+  /// Retrieves posts visible to the current user.
+  ///
+  /// Public posts from public accounts are visible to everyone.
+  /// Posts from private accounts are visible only to accepted followers.
+  /// Followers-only posts are visible to followers and their author.
+  /// Private posts are visible only to their author.
   Future<List<Map<String, dynamic>>> getPublicPosts({
     int? currentUserId,
   }) async {
@@ -37,10 +41,55 @@ class PostRepository {
         LEFT JOIN public.post_stats AS s ON s.post_id = p.id
         WHERE
           p.status = 'published'
-          AND p.visibility = 'public'
           AND p.deleted_at IS NULL
           AND u.deleted_at IS NULL
           AND u.status = 'active'
+
+          AND (
+            p.user_id = CAST(@currentUserId AS BIGINT)
+
+            OR (
+              p.visibility = 'public'
+              AND (
+                u.is_private = FALSE
+                OR EXISTS (
+                  SELECT 1
+                  FROM public.user_follows AS uf
+                  WHERE uf.follower_user_id =
+                    CAST(@currentUserId AS BIGINT)
+                    AND uf.following_user_id = u.id
+                )
+              )
+            )
+
+            OR (
+              p.visibility = 'followers'
+              AND EXISTS (
+                SELECT 1
+                FROM public.user_follows AS uf
+                WHERE uf.follower_user_id =
+                  CAST(@currentUserId AS BIGINT)
+                  AND uf.following_user_id = u.id
+              )
+            )
+          )
+
+          AND (
+            CAST(@currentUserId AS BIGINT) IS NULL
+            OR NOT EXISTS (
+              SELECT 1
+              FROM public.user_blocks AS b
+              WHERE (
+                b.blocker_user_id = CAST(@currentUserId AS BIGINT)
+                AND b.blocked_user_id = u.id
+              )
+              OR (
+                b.blocker_user_id = u.id
+                AND b.blocked_user_id = CAST(@currentUserId AS BIGINT)
+              )
+            )
+          )
+
         ORDER BY p.published_at DESC NULLS LAST, p.id DESC
         LIMIT 50
       '''),
@@ -53,6 +102,9 @@ class PostRepository {
   }
 
   /// Creates a public post and its initial statistics in one SQL statement.
+  ///
+  /// Account privacy is enforced when posts are retrieved, not by changing
+  /// the post's visibility value.
   Future<Map<String, dynamic>> createPublicPost({
     required int userId,
     required String content,
@@ -122,7 +174,7 @@ class PostRepository {
 
   /// Adds or removes a user's like and returns the resulting state.
   ///
-  /// Returns null when the post is not available for public interaction.
+  /// Returns null when the post is not available to the current user.
   Future<Map<String, dynamic>?> setPostLike({
     required int postId,
     required int userId,
@@ -138,13 +190,56 @@ class PostRepository {
           JOIN public.users AS u ON u.id = p.user_id
           WHERE p.id = @postId
             AND p.status = 'published'
-            AND p.visibility = 'public'
             AND p.deleted_at IS NULL
             AND u.status = 'active'
             AND u.deleted_at IS NULL
+
+            AND (
+              p.user_id = @userId
+
+              OR (
+                p.visibility = 'public'
+                AND (
+                  u.is_private = FALSE
+                  OR EXISTS (
+                    SELECT 1
+                    FROM public.user_follows AS uf
+                    WHERE uf.follower_user_id = @userId
+                      AND uf.following_user_id = u.id
+                  )
+                )
+              )
+
+              OR (
+                p.visibility = 'followers'
+                AND EXISTS (
+                  SELECT 1
+                  FROM public.user_follows AS uf
+                  WHERE uf.follower_user_id = @userId
+                    AND uf.following_user_id = u.id
+                )
+              )
+            )
+
+            AND NOT EXISTS (
+              SELECT 1
+              FROM public.user_blocks AS b
+              WHERE (
+                b.blocker_user_id = @userId
+                AND b.blocked_user_id = u.id
+              )
+              OR (
+                b.blocker_user_id = u.id
+                AND b.blocked_user_id = @userId
+              )
+            )
+
           LIMIT 1
         '''),
-        parameters: {'postId': postId},
+        parameters: {
+          'postId': postId,
+          'userId': userId,
+        },
       );
 
       if (postResult.isEmpty) {
@@ -165,21 +260,19 @@ class PostRepository {
           },
         );
 
-        // Only increment the counter when a new like was inserted.
-        // Only increment the counter when a new like was inserted.
         if (insertResult.isNotEmpty) {
           await session.execute(
             Sql.named('''
-      INSERT INTO public.post_stats (
-        post_id,
-        likes_count,
-        updated_at
-      )
-      VALUES (@postId, 1, CURRENT_TIMESTAMP)
-      ON CONFLICT (post_id) DO UPDATE
-      SET likes_count = public.post_stats.likes_count + 1,
-          updated_at = CURRENT_TIMESTAMP
-    '''),
+              INSERT INTO public.post_stats (
+                post_id,
+                likes_count,
+                updated_at
+              )
+              VALUES (@postId, 1, CURRENT_TIMESTAMP)
+              ON CONFLICT (post_id) DO UPDATE
+              SET likes_count = public.post_stats.likes_count + 1,
+                  updated_at = CURRENT_TIMESTAMP
+            '''),
             parameters: {'postId': postId},
           );
 
@@ -189,19 +282,19 @@ class PostRepository {
           if (postAuthorId != userId) {
             await session.execute(
               Sql.named('''
-        INSERT INTO public.notifications (
-          recipient_user_id,
-          actor_user_id,
-          notification_type,
-          post_id
-        )
-        VALUES (
-          @recipientUserId,
-          @actorUserId,
-          'post_like',
-          @postId
-        )
-      '''),
+                INSERT INTO public.notifications (
+                  recipient_user_id,
+                  actor_user_id,
+                  notification_type,
+                  post_id
+                )
+                VALUES (
+                  @recipientUserId,
+                  @actorUserId,
+                  'post_like',
+                  @postId
+                )
+              '''),
               parameters: {
                 'recipientUserId': postAuthorId,
                 'actorUserId': userId,
@@ -224,7 +317,6 @@ class PostRepository {
           },
         );
 
-        // Only decrement when an existing like was actually removed.
         if (deleteResult.isNotEmpty) {
           await session.execute(
             Sql.named('''

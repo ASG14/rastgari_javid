@@ -1,4 +1,3 @@
-
 import 'package:backend/src/core/database/database_pool.dart';
 import 'package:postgres/postgres.dart';
 
@@ -216,7 +215,6 @@ class UserRelationshipRepository {
     });
   }
 
-
   /// Removes the authenticated user's follow relationship with another user.
   ///
   /// Both accounts are locked in ascending ID order to serialize
@@ -297,7 +295,7 @@ class UserRelationshipRepository {
     });
   }
 
- 
+  /// Accepts a pending follow request within a database transaction.
   Future<Map<String, dynamic>> acceptFollowRequest({
     required int requestId,
     required int targetUserId,
@@ -588,12 +586,8 @@ class UserRelationshipRepository {
     required int firstUserId,
     required int secondUserId,
   }) async {
-    final firstId = firstUserId < secondUserId
-        ? firstUserId
-        : secondUserId;
-    final secondId = firstUserId < secondUserId
-        ? secondUserId
-        : firstUserId;
+    final firstId = firstUserId < secondUserId ? firstUserId : secondUserId;
+    final secondId = firstUserId < secondUserId ? secondUserId : firstUserId;
 
     final result = await session.execute(
       Sql.named('''

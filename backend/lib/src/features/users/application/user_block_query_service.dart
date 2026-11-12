@@ -1,4 +1,3 @@
-
 import 'package:backend/src/features/users/data/user_block_query_repository.dart';
 
 /// Represents a blocked-user listing error.

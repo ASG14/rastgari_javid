@@ -1,4 +1,3 @@
-
 import 'dart:io';
 
 import 'package:backend/src/features/auth/data/auth_repository.dart';
@@ -40,7 +39,8 @@ class AuthService {
 
     if (!RegExp(r'^[A-Za-z0-9_]{3,30}$').hasMatch(normalizedUsername)) {
       throw AuthException(
-        'نام کاربری باید ۳ تا ۳۰ کاراکتر و شامل حروف انگلیسی، عدد یا زیرخط باشد.',
+        'نام کاربری باید ۳ تا ۳۰ کاراکتر و شامل '
+        'حروف انگلیسی، عدد یا زیرخط باشد.',
       );
     }
 

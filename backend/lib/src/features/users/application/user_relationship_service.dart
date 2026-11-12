@@ -87,7 +87,8 @@ class UserRelationshipService {
 
       case 'incoming_request_pending':
         throw const UserRelationshipException(
-          'از این کاربر یک درخواست دنبال کردن دریافت کرده‌اید.\n ابتدا آن را بررسی کنید.',
+          'از این کاربر یک درخواست دنبال کردن دریافت کرده‌اید.'
+          '\nابتدا آن را بررسی کنید.',
           statusCode: 409,
         );
 
@@ -187,6 +188,7 @@ class UserRelationshipService {
     }
   }
 
+  /// Accepts a pending follow request for the target user.
   Future<Map<String, dynamic>> acceptFollowRequest({
     required int targetUserId,
     required int requestId,

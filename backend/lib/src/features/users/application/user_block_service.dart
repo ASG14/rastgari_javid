@@ -1,4 +1,3 @@
-
 import 'package:backend/src/features/users/data/user_block_repository.dart';
 
 /// Represents a user blocking operation error.

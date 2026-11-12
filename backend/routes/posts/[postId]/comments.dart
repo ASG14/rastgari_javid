@@ -26,7 +26,7 @@ Future<Response> onRequest(
   final method = context.request.method.value;
 
   if (method == 'GET') {
-    return _getComments(parsedPostId);
+    return _getComments(context, parsedPostId);
   }
 
   if (method == 'POST') {
@@ -39,20 +39,55 @@ Future<Response> onRequest(
   );
 }
 
-Future<Response> _getComments(int postId) async {
+Future<Response> _getComments(
+  RequestContext context,
+  int postId,
+) async {
   try {
+    int? viewerUserId;
+    final authorization = context.request.headers['authorization'];
+
+    if (authorization != null && authorization.isNotEmpty) {
+      final parts = authorization.split(RegExp(r'\s+'));
+
+      if (parts.length != 2 ||
+          parts[0].toLowerCase() != 'bearer' ||
+          parts[1].isEmpty) {
+        return Response.json(
+          statusCode: 401,
+          body: {'error': 'فرمت توکن ورود معتبر نیست.'},
+        );
+      }
+
+      final user = await authService.getCurrentUser(parts[1]);
+      viewerUserId = int.tryParse(user['id']?.toString() ?? '');
+
+      if (viewerUserId == null || viewerUserId < 1) {
+        return Response.json(
+          statusCode: 401,
+          body: {'error': 'اطلاعات حساب کاربری معتبر نیست.'},
+        );
+      }
+    }
+
     final comments = await commentService.getPostComments(
       postId: postId,
+      viewerUserId: viewerUserId,
     );
 
     if (comments == null) {
       return Response.json(
         statusCode: 404,
-        body: {'error': 'پست موردنظر یافت نشد.'},
+        body: {'error': 'پست موردنظر یافت نشد یا دسترسی به آن مجاز نیست.'},
       );
     }
 
     return Response.json(body: {'data': comments});
+  } on AuthException catch (error) {
+    return Response.json(
+      statusCode: error.statusCode,
+      body: {'error': error.message},
+    );
   } on CommentException catch (error) {
     return Response.json(
       statusCode: 400,
@@ -146,6 +181,7 @@ Future<Response> _createComment(
       body: {'error': 'متن دیدگاه الزامی است.'},
     );
   }
+
   final rawParentCommentId = decoded['parent_comment_id'];
   int? parentCommentId;
 
@@ -166,7 +202,7 @@ Future<Response> _createComment(
 
   final userId = int.tryParse(user['id']?.toString() ?? '');
 
-  if (userId == null) {
+  if (userId == null || userId < 1) {
     return Response.json(
       statusCode: 401,
       body: {'error': 'اطلاعات حساب کاربری معتبر نیست.'},
@@ -185,7 +221,9 @@ Future<Response> _createComment(
       return Response.json(
         statusCode: 404,
         body: {
-          'error': 'پست، حساب کاربری یا دیدگاه والد معتبر نیست.',
+          'error':
+              'پست، حساب کاربری یا دیدگاه والد معتبر نیست، '
+              'یا دسترسی مجاز نیست.',
         },
       );
     }

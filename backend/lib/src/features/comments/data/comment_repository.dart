@@ -3,9 +3,10 @@ import 'package:postgres/postgres.dart';
 
 /// Handles database operations for post comments and replies.
 class CommentRepository {
-  /// Returns visible top-level comments and their replies for a public post.
+  /// Returns comments for a post accessible to the viewer.
   Future<List<Map<String, dynamic>>?> getPostComments({
     required int postId,
+    int? viewerUserId,
   }) async {
     final postResult = await database.execute(
       Sql.named('''
@@ -14,13 +15,58 @@ class CommentRepository {
         JOIN public.users AS u ON u.id = p.user_id
         WHERE p.id = @postId
           AND p.status = 'published'
-          AND p.visibility = 'public'
           AND p.deleted_at IS NULL
           AND u.status = 'active'
           AND u.deleted_at IS NULL
+          AND (
+            p.user_id = CAST(@viewerUserId AS BIGINT)
+            OR (
+              p.visibility = 'public'
+              AND (
+                u.is_private = FALSE
+                OR EXISTS (
+                  SELECT 1
+                  FROM public.user_follows AS uf
+                  WHERE uf.follower_user_id =
+                    CAST(@viewerUserId AS BIGINT)
+                    AND uf.following_user_id = p.user_id
+                )
+              )
+            )
+            OR (
+              p.visibility = 'followers'
+              AND EXISTS (
+                SELECT 1
+                FROM public.user_follows AS uf
+                WHERE uf.follower_user_id =
+                  CAST(@viewerUserId AS BIGINT)
+                  AND uf.following_user_id = p.user_id
+              )
+            )
+          )
+          AND (
+            CAST(@viewerUserId AS BIGINT) IS NULL
+            OR NOT EXISTS (
+              SELECT 1
+              FROM public.user_blocks AS ub
+              WHERE (
+                ub.blocker_user_id =
+                  CAST(@viewerUserId AS BIGINT)
+                AND ub.blocked_user_id = p.user_id
+              )
+              OR (
+                ub.blocker_user_id = p.user_id
+                AND ub.blocked_user_id =
+                  CAST(@viewerUserId AS BIGINT)
+              )
+            )
+          )
         LIMIT 1
       '''),
-      parameters: {'postId': postId},
+      parameters: {
+        'postId': postId,
+        'viewerUserId': viewerUserId,
+      },
     );
 
     if (postResult.isEmpty) return null;
@@ -36,6 +82,23 @@ class CommentRepository {
             AND c.deleted_at IS NULL
             AND u.status = 'active'
             AND u.deleted_at IS NULL
+            AND (
+              CAST(@viewerUserId AS BIGINT) IS NULL
+              OR NOT EXISTS (
+                SELECT 1
+                FROM public.user_blocks AS ub
+                WHERE (
+                  ub.blocker_user_id =
+                    CAST(@viewerUserId AS BIGINT)
+                  AND ub.blocked_user_id = c.user_id
+                )
+                OR (
+                  ub.blocker_user_id = c.user_id
+                  AND ub.blocked_user_id =
+                    CAST(@viewerUserId AS BIGINT)
+                )
+              )
+            )
           ORDER BY c.created_at ASC, c.id ASC
           LIMIT 100
         )
@@ -59,6 +122,23 @@ class CommentRepository {
             c.id IN (SELECT id FROM visible_top_level)
             OR c.parent_comment_id IN (SELECT id FROM visible_top_level)
           )
+          AND (
+            CAST(@viewerUserId AS BIGINT) IS NULL
+            OR NOT EXISTS (
+              SELECT 1
+              FROM public.user_blocks AS ub
+              WHERE (
+                ub.blocker_user_id =
+                  CAST(@viewerUserId AS BIGINT)
+                AND ub.blocked_user_id = c.user_id
+              )
+              OR (
+                ub.blocker_user_id = c.user_id
+                AND ub.blocked_user_id =
+                  CAST(@viewerUserId AS BIGINT)
+              )
+            )
+          )
         ORDER BY
           COALESCE(c.parent_comment_id, c.id) ASC,
           (c.parent_comment_id IS NOT NULL) ASC,
@@ -66,7 +146,10 @@ class CommentRepository {
           c.id ASC
         LIMIT 600
       '''),
-      parameters: {'postId': postId},
+      parameters: {
+        'postId': postId,
+        'viewerUserId': viewerUserId,
+      },
     );
 
     return result.map((row) {
@@ -88,10 +171,9 @@ class CommentRepository {
     }).toList();
   }
 
-  /// Creates a comment or a reply and updates the post comment counter.
+  /// Creates a comment or reply and updates the post comment counter.
   ///
-  /// When [parentCommentId] is provided, it must identify a visible,
-  /// top-level comment belonging to the same post.
+  /// The user must be allowed to view the post, and comments must be enabled.
   Future<Map<String, dynamic>?> createComment({
     required int postId,
     required int userId,
@@ -108,13 +190,52 @@ class CommentRepository {
           JOIN public.users AS u ON u.id = p.user_id
           WHERE p.id = @postId
             AND p.status = 'published'
-            AND p.visibility = 'public'
             AND p.deleted_at IS NULL
+            AND p.comments_enabled = TRUE
             AND u.status = 'active'
             AND u.deleted_at IS NULL
+            AND (
+              p.user_id = @userId
+              OR (
+                p.visibility = 'public'
+                AND (
+                  u.is_private = FALSE
+                  OR EXISTS (
+                    SELECT 1
+                    FROM public.user_follows AS uf
+                    WHERE uf.follower_user_id = @userId
+                      AND uf.following_user_id = p.user_id
+                  )
+                )
+              )
+              OR (
+                p.visibility = 'followers'
+                AND EXISTS (
+                  SELECT 1
+                  FROM public.user_follows AS uf
+                  WHERE uf.follower_user_id = @userId
+                    AND uf.following_user_id = p.user_id
+                )
+              )
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM public.user_blocks AS ub
+              WHERE (
+                ub.blocker_user_id = @userId
+                AND ub.blocked_user_id = p.user_id
+              )
+              OR (
+                ub.blocker_user_id = p.user_id
+                AND ub.blocked_user_id = @userId
+              )
+            )
           LIMIT 1
         '''),
-        parameters: {'postId': postId},
+        parameters: {
+          'postId': postId,
+          'userId': userId,
+        },
       );
 
       if (postResult.isEmpty) return null;
@@ -141,9 +262,7 @@ class CommentRepository {
       if (parentCommentId != null) {
         final parentResult = await session.execute(
           Sql.named('''
-            SELECT
-              c.id,
-              c.user_id AS parent_author_id
+            SELECT c.id, c.user_id AS parent_author_id
             FROM public.comments AS c
             JOIN public.users AS u ON u.id = c.user_id
             WHERE c.id = @parentCommentId
@@ -152,11 +271,24 @@ class CommentRepository {
               AND c.deleted_at IS NULL
               AND u.status = 'active'
               AND u.deleted_at IS NULL
+              AND NOT EXISTS (
+                SELECT 1
+                FROM public.user_blocks AS ub
+                WHERE (
+                  ub.blocker_user_id = @userId
+                  AND ub.blocked_user_id = c.user_id
+                )
+                OR (
+                  ub.blocker_user_id = c.user_id
+                  AND ub.blocked_user_id = @userId
+                )
+              )
             LIMIT 1
           '''),
           parameters: {
             'parentCommentId': parentCommentId,
             'postId': postId,
+            'userId': userId,
           },
         );
 

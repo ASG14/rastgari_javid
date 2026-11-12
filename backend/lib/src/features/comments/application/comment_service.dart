@@ -7,18 +7,26 @@ class CommentService {
 
   final CommentRepository _repository;
 
-  /// Returns top-level comments and replies for a public post.
+  /// Returns comments for a post accessible to the optional viewer.
   Future<List<Map<String, dynamic>>?> getPostComments({
     required int postId,
+    int? viewerUserId,
   }) {
     if (postId < 1) {
       throw const CommentException('شناسه پست معتبر نیست.');
     }
 
-    return _repository.getPostComments(postId: postId);
+    if (viewerUserId != null && viewerUserId < 1) {
+      throw const CommentException('شناسه کاربر معتبر نیست.');
+    }
+
+    return _repository.getPostComments(
+      postId: postId,
+      viewerUserId: viewerUserId,
+    );
   }
 
-  /// Publishes a comment or a reply for an authenticated user.
+  /// Publishes a comment or reply for an authenticated user.
   Future<Map<String, dynamic>?> createComment({
     required int postId,
     required int userId,

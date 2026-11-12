@@ -2,8 +2,8 @@ import 'package:backend/src/features/notifications/data/notification_repository.
 
 /// Handles application logic for user notifications.
 class NotificationService {
+  /// Creates a notification service with its repository.
   NotificationService(this._repository);
-
   final NotificationRepository _repository;
 
   /// Returns the latest notifications belonging to a user.
