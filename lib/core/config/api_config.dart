@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 class ApiConfig {
   ApiConfig._();
 
-  static const int port = 8081;
+  static const int port = 8080;
 
   static String get baseUrl {
     if (kIsWeb) {
