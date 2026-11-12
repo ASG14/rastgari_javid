@@ -23,3 +23,7 @@ android/.kotlin/
 
 # Widget Preview related
 .widget_preview/
+
+# IDE configuration
+.idea/
+*.iml
