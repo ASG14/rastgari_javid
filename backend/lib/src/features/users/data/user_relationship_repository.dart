@@ -1,3 +1,4 @@
+
 import 'package:backend/src/core/database/database_pool.dart';
 import 'package:postgres/postgres.dart';
 
@@ -8,7 +9,8 @@ class UserRelationshipRepository {
   /// Public accounts are followed immediately.
   /// Private accounts receive a pending follow request.
   ///
-  /// The relationship and its notification are created in one transaction.
+  /// Both accounts are locked in ascending ID order to serialize
+  /// concurrent relationship operations.
   Future<Map<String, dynamic>> followUser({
     required int actorUserId,
     required int targetUserId,
@@ -22,54 +24,25 @@ class UserRelationshipRepository {
     }
 
     return database.runTx((session) async {
-      // Verify that the requesting account is active.
-      final actorResult = await session.execute(
-        Sql.named('''
-          SELECT id
-          FROM public.users
-          WHERE id = @actorUserId
-            AND deleted_at IS NULL
-            AND status = 'active'
-          LIMIT 1
-        '''),
-        parameters: {
-          'actorUserId': actorUserId,
-        },
+      final users = await _lockUsers(
+        session,
+        firstUserId: actorUserId,
+        secondUserId: targetUserId,
       );
 
-      if (actorResult.isEmpty) {
-        return {
-          'status': 'actor_not_found',
-        };
+      final actor = users[actorUserId];
+      final target = users[targetUserId];
+
+      if (actor == null || !_isActive(actor)) {
+        return {'status': 'actor_not_found'};
       }
 
-      // Lock the target account to prevent privacy changes from racing
-      // with the creation of a follow or follow request.
-      final targetResult = await session.execute(
-        Sql.named('''
-          SELECT id, is_private
-          FROM public.users
-          WHERE id = @targetUserId
-            AND deleted_at IS NULL
-            AND status = 'active'
-          LIMIT 1
-          FOR UPDATE
-        '''),
-        parameters: {
-          'targetUserId': targetUserId,
-        },
-      );
-
-      if (targetResult.isEmpty) {
-        return {
-          'status': 'target_not_found',
-        };
+      if (target == null || !_isActive(target)) {
+        return {'status': 'target_not_found'};
       }
 
-      final target = targetResult.first.toColumnMap();
       final isPrivate = target['is_private'] as bool;
 
-      // A block in either direction prevents following.
       final blockResult = await session.execute(
         Sql.named('''
           SELECT EXISTS (
@@ -92,12 +65,9 @@ class UserRelationshipRepository {
       );
 
       if (blockResult.first[0] == true) {
-        return {
-          'status': 'blocked',
-        };
+        return {'status': 'blocked'};
       }
 
-      // Check whether the relationship already exists.
       final followResult = await session.execute(
         Sql.named('''
           SELECT EXISTS (
@@ -114,13 +84,10 @@ class UserRelationshipRepository {
       );
 
       if (followResult.first[0] == true) {
-        return {
-          'status': 'already_following',
-        };
+        return {'status': 'already_following'};
       }
 
       if (isPrivate) {
-        // Only one pending request is allowed for each unordered pair.
         final pendingResult = await session.execute(
           Sql.named('''
             SELECT
@@ -143,7 +110,6 @@ class UserRelationshipRepository {
 
         if (pendingResult.isNotEmpty) {
           final pending = pendingResult.first.toColumnMap();
-
           final requesterId = _toInt(pending['requester_user_id']);
 
           return {
@@ -154,7 +120,6 @@ class UserRelationshipRepository {
           };
         }
 
-        // Create a new request for the private account.
         final requestResult = await session.execute(
           Sql.named('''
             INSERT INTO public.follow_requests (
@@ -177,7 +142,6 @@ class UserRelationshipRepository {
 
         final requestId = requestResult.first.toColumnMap()['id'];
 
-        // Notify the owner of the private account.
         await session.execute(
           Sql.named('''
             INSERT INTO public.notifications (
@@ -203,7 +167,6 @@ class UserRelationshipRepository {
         };
       }
 
-      // Public account: create the follow relationship immediately.
       final followInsertResult = await session.execute(
         Sql.named('''
           INSERT INTO public.user_follows (
@@ -227,12 +190,9 @@ class UserRelationshipRepository {
       );
 
       if (followInsertResult.isEmpty) {
-        return {
-          'status': 'already_following',
-        };
+        return {'status': 'already_following'};
       }
 
-      // Notify the followed account.
       await session.execute(
         Sql.named('''
           INSERT INTO public.notifications (
@@ -252,18 +212,14 @@ class UserRelationshipRepository {
         },
       );
 
-      return {
-        'status': 'following',
-      };
+      return {'status': 'following'};
     });
   }
 
   /// Accepts a pending follow request.
   ///
   /// The target user must be the authenticated user.
-  /// The follow relationship and acceptance notification are created
-  /// atomically.
-
+  /// Both accounts are locked before the request row is locked.
   Future<Map<String, dynamic>> acceptFollowRequest({
     required int requestId,
     required int targetUserId,
@@ -273,6 +229,52 @@ class UserRelationshipRepository {
     }
 
     return database.runTx((session) async {
+      // Read the requester ID first without locking the request row.
+      // This lets us acquire account locks before the request lock.
+      final initialRequestResult = await session.execute(
+        Sql.named('''
+          SELECT requester_user_id
+          FROM public.follow_requests
+          WHERE id = @requestId
+            AND target_user_id = @targetUserId
+          LIMIT 1
+        '''),
+        parameters: {
+          'requestId': requestId,
+          'targetUserId': targetUserId,
+        },
+      );
+
+      if (initialRequestResult.isEmpty) {
+        return {'status': 'not_found'};
+      }
+
+      final requesterId = _toInt(
+        initialRequestResult.first.toColumnMap()['requester_user_id'],
+      );
+
+      if (requesterId == targetUserId) {
+        return {'status': 'not_found'};
+      }
+
+      final users = await _lockUsers(
+        session,
+        firstUserId: requesterId,
+        secondUserId: targetUserId,
+      );
+
+      final requester = users[requesterId];
+      final target = users[targetUserId];
+
+      if (requester == null || !_isActive(requester)) {
+        return {'status': 'requester_not_found'};
+      }
+
+      if (target == null || !_isActive(target)) {
+        return {'status': 'target_not_found'};
+      }
+
+      // Re-read and lock the request after acquiring both account locks.
       final requestResult = await session.execute(
         Sql.named('''
           SELECT
@@ -298,11 +300,13 @@ class UserRelationshipRepository {
 
       final request = requestResult.first.toColumnMap();
 
+      if (_toInt(request['requester_user_id']) != requesterId) {
+        return {'status': 'not_found'};
+      }
+
       if (request['status'] != 'pending') {
         return {'status': 'not_pending'};
       }
-
-      final requesterId = _toInt(request['requester_user_id']);
 
       final blockResult = await session.execute(
         Sql.named('''
@@ -494,6 +498,55 @@ class UserRelationshipRepository {
 
       return {'status': 'cancelled'};
     });
+  }
+
+  /// Locks two user rows in ascending ID order.
+  ///
+  /// Returns the existing rows keyed by user ID.
+  /// Inactive users are included so their status can be checked
+  /// after the locks have been acquired.
+  Future<Map<int, Map<String, dynamic>>> _lockUsers(
+    Session session, {
+    required int firstUserId,
+    required int secondUserId,
+  }) async {
+    final firstId = firstUserId < secondUserId
+        ? firstUserId
+        : secondUserId;
+    final secondId = firstUserId < secondUserId
+        ? secondUserId
+        : firstUserId;
+
+    final result = await session.execute(
+      Sql.named('''
+        SELECT
+          id,
+          is_private,
+          status,
+          deleted_at
+        FROM public.users
+        WHERE id IN (@firstUserId, @secondUserId)
+        ORDER BY id ASC
+        FOR UPDATE
+      '''),
+      parameters: {
+        'firstUserId': firstId,
+        'secondUserId': secondId,
+      },
+    );
+
+    final users = <int, Map<String, dynamic>>{};
+
+    for (final row in result) {
+      final user = row.toColumnMap();
+      users[_toInt(user['id'])] = user;
+    }
+
+    return users;
+  }
+
+  bool _isActive(Map<String, dynamic> user) {
+    return user['deleted_at'] == null && user['status'] == 'active';
   }
 
   int _toInt(dynamic value) {
