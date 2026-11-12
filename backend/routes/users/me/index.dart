@@ -1,4 +1,3 @@
-
 import 'dart:developer' as developer;
 
 import 'package:backend/src/features/auth/application/auth_service.dart';

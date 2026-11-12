@@ -5,6 +5,103 @@ import 'package:postgres/postgres.dart';
 class PostRepository {
   /// Retrieves posts visible to the current user.
   ///
+  /// Retrieves a single post if it is visible to the current user.
+  ///
+  /// Returns null when the post does not exist or access is denied.
+  Future<Map<String, dynamic>?> getPostById({
+    required int postId,
+    int? currentUserId,
+  }) async {
+    final result = await database.execute(
+      Sql.named('''
+        SELECT
+          p.id AS post_id,
+          p.content,
+          p.visibility,
+          p.published_at,
+          p.created_at,
+          u.id AS author_id,
+          u.username,
+          u.display_name,
+          u.avatar_storage_key,
+          COALESCE(s.likes_count, 0) AS likes_count,
+          COALESCE(s.comments_count, 0) AS comments_count,
+          COALESCE(s.reposts_count, 0) AS reposts_count,
+          CASE
+            WHEN CAST(@currentUserId AS BIGINT) IS NULL THEN FALSE
+            ELSE EXISTS (
+              SELECT 1
+              FROM public.post_likes AS pl
+              WHERE pl.post_id = p.id
+                AND pl.user_id = CAST(@currentUserId AS BIGINT)
+            )
+          END AS is_liked
+        FROM public.posts AS p
+        JOIN public.users AS u ON u.id = p.user_id
+        LEFT JOIN public.post_stats AS s ON s.post_id = p.id
+        WHERE p.id = @postId
+          AND p.status = 'published'
+          AND p.deleted_at IS NULL
+          AND u.status = 'active'
+          AND u.deleted_at IS NULL
+
+          AND (
+            p.user_id = CAST(@currentUserId AS BIGINT)
+
+            OR (
+              p.visibility = 'public'
+              AND (
+                u.is_private = FALSE
+                OR EXISTS (
+                  SELECT 1
+                  FROM public.user_follows AS uf
+                  WHERE uf.follower_user_id =
+                    CAST(@currentUserId AS BIGINT)
+                    AND uf.following_user_id = u.id
+                )
+              )
+            )
+
+            OR (
+              p.visibility = 'followers'
+              AND EXISTS (
+                SELECT 1
+                FROM public.user_follows AS uf
+                WHERE uf.follower_user_id =
+                  CAST(@currentUserId AS BIGINT)
+                  AND uf.following_user_id = u.id
+              )
+            )
+          )
+
+          AND (
+            CAST(@currentUserId AS BIGINT) IS NULL
+            OR NOT EXISTS (
+              SELECT 1
+              FROM public.user_blocks AS b
+              WHERE (
+                b.blocker_user_id = CAST(@currentUserId AS BIGINT)
+                AND b.blocked_user_id = u.id
+              )
+              OR (
+                b.blocker_user_id = u.id
+                AND b.blocked_user_id = CAST(@currentUserId AS BIGINT)
+              )
+            )
+          )
+        LIMIT 1
+      '''),
+      parameters: {
+        'postId': postId,
+        'currentUserId': currentUserId,
+      },
+    );
+
+    if (result.isEmpty) return null;
+
+    return _mapPost(result.first.toColumnMap());
+  }
+
   /// Public posts from public accounts are visible to everyone.
   /// Posts from private accounts are visible only to accepted followers.
   /// Followers-only posts are visible to followers and their author.

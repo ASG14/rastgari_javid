@@ -55,6 +55,21 @@ class PostService {
       isLiked: isLiked,
     );
   }
+
+  /// Retrieves a post visible to the current user.
+  Future<Map<String, dynamic>?> getPostById({
+    required int postId,
+    int? currentUserId,
+  }) {
+    if (postId < 1 || (currentUserId != null && currentUserId < 1)) {
+      throw const PostException('شناسه پست یا کاربر معتبر نیست.');
+    }
+
+    return _postRepository.getPostById(
+      postId: postId,
+      currentUserId: currentUserId,
+    );
+  }
 }
 
 /// Represents a post-related validation error.
