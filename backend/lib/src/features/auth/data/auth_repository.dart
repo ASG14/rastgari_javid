@@ -1,3 +1,4 @@
+
 import 'package:backend/src/core/database/database_pool.dart';
 import 'package:postgres/postgres.dart';
 
@@ -13,7 +14,8 @@ class AuthRepository {
           display_name,
           email,
           password_hash,
-          status
+          status,
+          is_private
         FROM public.users
         WHERE lower(username) = lower(@username)
           AND deleted_at IS NULL
@@ -83,13 +85,14 @@ class AuthRepository {
           @passwordHash
         )
         RETURNING
-  id,
-  username,
-  display_name,
-  email,
-  bio,
-  avatar_storage_key,
-  created_at
+          id,
+          username,
+          display_name,
+          email,
+          bio,
+          avatar_storage_key,
+          is_private,
+          created_at
       '''),
       parameters: {
         'username': username,
@@ -120,18 +123,19 @@ class AuthRepository {
     final result = await database.execute(
       Sql.named('''
         SELECT
-  id,
-  username,
-  display_name,
-  email,
-  bio,
-  avatar_storage_key,
-  created_at,
-  status
-FROM public.users
-WHERE id = @id
-  AND deleted_at IS NULL
-LIMIT 1
+          id,
+          username,
+          display_name,
+          email,
+          bio,
+          avatar_storage_key,
+          is_private,
+          created_at,
+          status
+        FROM public.users
+        WHERE id = @id
+          AND deleted_at IS NULL
+        LIMIT 1
       '''),
       parameters: {'id': userId},
     );

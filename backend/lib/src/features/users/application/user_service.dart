@@ -1,3 +1,4 @@
+
 import 'package:backend/src/features/users/data/user_repository.dart';
 
 /// Represents a profile-related validation error.
@@ -11,7 +12,7 @@ class UserException implements Exception {
   /// User-facing error message.
   final String message;
 
-  /// HTTP status code associated with this error.
+  /// HTTP status code associated with the error.
   final int statusCode;
 
   @override
@@ -34,11 +35,19 @@ class UserService {
     String? displayName,
     bool updateBio = false,
     String? bio,
+    bool updateIsPrivate = false,
+    bool? isPrivate,
   }) async {
     if (userId < 1) {
       throw const UserException(
         'شناسه کاربر معتبر نیست.',
         statusCode: 401,
+      );
+    }
+
+    if (updateIsPrivate && isPrivate == null) {
+      throw const UserException(
+        'وضعیت حریم خصوصی حساب معتبر نیست.',
       );
     }
 
@@ -49,7 +58,7 @@ class UserService {
     if (normalizedUsername != null) {
       if (!RegExp(r'^[A-Za-z0-9_]{3,30}$').hasMatch(normalizedUsername)) {
         throw const UserException(
-          'نام کاربری باید ۳ تا ۳۰ کاراکتر و شامل \n حروف انگلیسی، عدد یا زیرخط باشد.',
+          'نام کاربری باید ۳ تا ۳۰ کاراکتر و شامل حروف انگلیسی، عدد یا زیرخط باشد.',
         );
       }
 
@@ -77,8 +86,6 @@ class UserService {
       );
     }
 
-    // Fetch current data through a profile update that preserves omitted
-    // fields. The repository needs the current values for PATCH semantics.
     final currentProfile = await _repository.getProfile(userId);
 
     if (currentProfile == null) {
@@ -95,6 +102,8 @@ class UserService {
           normalizedDisplayName ?? currentProfile['display_name'] as String,
       updateBio: updateBio,
       bio: normalizedBio,
+      updateIsPrivate: updateIsPrivate,
+      isPrivate: isPrivate,
     );
 
     if (updatedProfile == null) {

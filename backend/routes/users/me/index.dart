@@ -1,3 +1,4 @@
+
 import 'dart:developer' as developer;
 
 import 'package:backend/src/features/auth/application/auth_service.dart';
@@ -81,6 +82,8 @@ Future<Response> onRequest(RequestContext context) async {
     final displayName = decoded['display_name'];
     final updateBio = decoded.containsKey('bio');
     final bio = decoded['bio'];
+    final updateIsPrivate = decoded.containsKey('is_private');
+    final isPrivate = decoded['is_private'];
 
     if (username != null && username is! String) {
       return Response.json(
@@ -103,7 +106,17 @@ Future<Response> onRequest(RequestContext context) async {
       );
     }
 
-    if (username == null && displayName == null && !updateBio) {
+    if (updateIsPrivate && isPrivate is! bool) {
+      return Response.json(
+        statusCode: 400,
+        body: {'error': 'وضعیت حریم خصوصی باید true یا false باشد.'},
+      );
+    }
+
+    if (username == null &&
+        displayName == null &&
+        !updateBio &&
+        !updateIsPrivate) {
       return Response.json(
         statusCode: 400,
         body: {
@@ -118,6 +131,8 @@ Future<Response> onRequest(RequestContext context) async {
       displayName: displayName as String?,
       updateBio: updateBio,
       bio: bio as String?,
+      updateIsPrivate: updateIsPrivate,
+      isPrivate: isPrivate as bool?,
     );
 
     return Response.json(

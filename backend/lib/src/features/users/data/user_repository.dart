@@ -1,3 +1,4 @@
+
 import 'package:backend/src/core/database/database_pool.dart';
 import 'package:postgres/postgres.dart';
 
@@ -38,6 +39,7 @@ class UserRepository {
           email,
           bio,
           avatar_storage_key,
+          is_private,
           created_at
         FROM public.users
         WHERE id = @userId
@@ -53,13 +55,17 @@ class UserRepository {
     return result.first.toColumnMap();
   }
 
-  /// Updates editable profile fields and returns the updated public profile.
+  /// Updates editable profile fields and returns the updated profile.
+  ///
+  /// Only fields explicitly marked for update are changed.
   Future<Map<String, dynamic>?> updateProfile({
     required int userId,
     required String username,
     required String displayName,
     required bool updateBio,
+    required bool updateIsPrivate,
     String? bio,
+    bool? isPrivate,
   }) async {
     final result = await database.execute(
       Sql.named('''
@@ -70,6 +76,10 @@ class UserRepository {
           bio = CASE
             WHEN @updateBio THEN CAST(@bio AS VARCHAR(500))
             ELSE bio
+          END,
+          is_private = CASE
+            WHEN @updateIsPrivate THEN @isPrivate
+            ELSE is_private
           END,
           updated_at = CURRENT_TIMESTAMP
         WHERE id = @userId
@@ -82,6 +92,7 @@ class UserRepository {
           email,
           bio,
           avatar_storage_key,
+          is_private,
           created_at
       '''),
       parameters: {
@@ -90,6 +101,8 @@ class UserRepository {
         'displayName': displayName,
         'updateBio': updateBio,
         'bio': bio,
+        'updateIsPrivate': updateIsPrivate,
+        'isPrivate': isPrivate,
       },
     );
 
