@@ -7,6 +7,7 @@ class AuthUser {
     this.bio,
     this.avatarStorageKey,
     this.createdAt,
+    this.isPrivate = false,
   });
 
   final int id;
@@ -16,11 +17,13 @@ class AuthUser {
   final String? bio;
   final String? avatarStorageKey;
   final String? createdAt;
+  final bool isPrivate;
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
     final idValue = json['id'];
     final usernameValue = json['username'];
     final displayNameValue = json['display_name'];
+    final isPrivateValue = json['is_private'];
 
     if (idValue is! num ||
         usernameValue is! String ||
@@ -28,6 +31,10 @@ class AuthUser {
       throw const FormatException(
         'ساختار اطلاعات پایه کاربر در پاسخ سرور معتبر نیست.',
       );
+    }
+
+    if (isPrivateValue != null && isPrivateValue is! bool) {
+      throw const FormatException('وضعیت حریم خصوصی حساب کاربر معتبر نیست.');
     }
 
     return AuthUser(
@@ -38,6 +45,7 @@ class AuthUser {
       bio: _optionalString(json['bio']),
       avatarStorageKey: _optionalString(json['avatar_storage_key']),
       createdAt: _optionalString(json['created_at']),
+      isPrivate: isPrivateValue as bool? ?? false,
     );
   }
 

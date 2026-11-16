@@ -30,16 +30,28 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
+  late final ScrollController _postsScrollController;
+
   final PostsRepository _postsRepository = PostsRepository();
 
   List<Post> _posts = [];
+
   bool _isLoadingPosts = true;
+  bool _isLoadingMorePosts = false;
+  bool _hasMorePosts = false;
+
   String? _postsError;
+  String? _loadMoreError;
+  String? _nextCursor;
 
   @override
   void initState() {
     super.initState();
+
     _tabController = TabController(length: 3, vsync: this);
+    _postsScrollController = ScrollController()
+      ..addListener(_handlePostsScroll);
+
     _loadMyPosts();
   }
 
@@ -55,28 +67,62 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _postsScrollController
+      ..removeListener(_handlePostsScroll)
+      ..dispose();
+
     super.dispose();
   }
 
+  void _handlePostsScroll() {
+    if (!_postsScrollController.hasClients ||
+        _isLoadingPosts ||
+        _isLoadingMorePosts ||
+        !_hasMorePosts) {
+      return;
+    }
+
+    final position = _postsScrollController.position;
+
+    if (position.extentAfter < 400) {
+      _loadMorePosts();
+    }
+  }
+
+  Future<String> _requireAccessToken() async {
+    final token = await widget.authRepository.readAccessToken();
+
+    if (token == null || token.isEmpty) {
+      throw Exception('نشست کاربری معتبر نیست. لطفاً دوباره وارد شوید.');
+    }
+
+    return token;
+  }
+
   Future<void> _loadMyPosts() async {
+    if (!mounted) return;
+
     setState(() {
       _isLoadingPosts = true;
+      _isLoadingMorePosts = false;
+      _hasMorePosts = false;
       _postsError = null;
+      _loadMoreError = null;
+      _nextCursor = null;
+      _posts = [];
     });
 
     try {
-      final token = await widget.authRepository.readAccessToken();
-      final allPosts = await _postsRepository.getPublicPosts(token: token);
+      final token = await _requireAccessToken();
+
+      final page = await _postsRepository.getOwnPosts(token: token, limit: 20);
 
       if (!mounted) return;
 
-      final myPosts =
-          allPosts.posts
-              .where((post) => post.author.id == widget.user.id.toString())
-              .toList()
-            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
       setState(() {
-        _posts = myPosts;
+        _posts = page.posts;
+        _hasMorePosts = page.hasMore;
+        _nextCursor = page.nextCursor;
         _isLoadingPosts = false;
       });
     } catch (error) {
@@ -89,12 +135,48 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  Future<void> _handleLikeChanged(Post post, bool isLiked) async {
-    final token = await widget.authRepository.readAccessToken();
-
-    if (token == null || token.isEmpty) {
-      throw Exception('برای ثبت همدلی باید وارد حساب کاربری شوید.');
+  Future<void> _loadMorePosts() async {
+    if (_isLoadingPosts ||
+        _isLoadingMorePosts ||
+        !_hasMorePosts ||
+        _nextCursor == null) {
+      return;
     }
+
+    setState(() {
+      _isLoadingMorePosts = true;
+      _loadMoreError = null;
+    });
+
+    try {
+      final token = await _requireAccessToken();
+
+      final page = await _postsRepository.getOwnPosts(
+        token: token,
+        limit: 20,
+        cursor: _nextCursor,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _posts = [..._posts, ...page.posts];
+        _hasMorePosts = page.hasMore;
+        _nextCursor = page.nextCursor;
+        _isLoadingMorePosts = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _loadMoreError = error.toString();
+        _isLoadingMorePosts = false;
+      });
+    }
+  }
+
+  Future<void> _handleLikeChanged(Post post, bool isLiked) async {
+    final token = await _requireAccessToken();
 
     final result = await _postsRepository.setPostLike(
       postId: post.id,
@@ -127,8 +209,6 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Directionality(
       textDirection: TextDirection.rtl,
       child: RefreshIndicator(
@@ -176,9 +256,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                   widget.isLoggingOut ? 'در حال خروج...' : 'خروج از حساب',
                 ),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: theme.colorScheme.error,
+                  foregroundColor: Theme.of(context).colorScheme.error,
                   side: BorderSide(
-                    color: theme.colorScheme.error.withValues(alpha: 0.5),
+                    color: Theme.of(context).colorScheme.error
+                        .withValues(alpha: 0.5),
                   ),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
@@ -239,6 +320,8 @@ class _ProfileScreenState extends State<ProfileScreen>
               color: colors.onSurfaceVariant,
             ),
           ),
+          const SizedBox(height: 10),
+          _buildPrivacyStatus(context),
           const SizedBox(height: 12),
           Text(
             hasBio ? bio : 'هنوز بیوگرافی‌ای برای پروفایل نوشته نشده است.',
@@ -251,6 +334,37 @@ class _ProfileScreenState extends State<ProfileScreen>
           Divider(
             height: 1,
             color: colors.outlineVariant.withValues(alpha: 0.7),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPrivacyStatus(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final isPrivate = widget.user.isPrivate;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isPrivate ? Icons.lock_outline_rounded : Icons.public_rounded,
+            size: 15,
+            color: colors.onSurfaceVariant,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            isPrivate ? 'حساب خصوصی' : 'حساب عمومی',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: colors.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -300,15 +414,22 @@ class _ProfileScreenState extends State<ProfileScreen>
         context,
         icon: Icons.post_add_rounded,
         title: 'هنوز پستی منتشر نکرده‌اید',
-        message:
-            'پست‌های عمومی شما پس از انتشار در این بخش نمایش داده می‌شوند.',
+        message: widget.user.isPrivate
+            ? 'پست‌هایی که در حساب خصوصی خود منتشر می‌کنید، در این بخش نمایش داده می‌شوند.'
+            : 'پست‌های شما پس از انتشار در این بخش نمایش داده می‌شوند.',
       );
     }
 
     return ListView.builder(
+      controller: _postsScrollController,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      itemCount: _posts.length,
+      itemCount:
+          _posts.length + (_hasMorePosts || _loadMoreError != null ? 1 : 0),
       itemBuilder: (context, index) {
+        if (index == _posts.length) {
+          return _buildLoadMoreFooter(context);
+        }
+
         final post = _posts[index];
 
         return PostCard(
@@ -339,6 +460,36 @@ class _ProfileScreenState extends State<ProfileScreen>
         );
       },
     );
+  }
+
+  Widget _buildLoadMoreFooter(BuildContext context) {
+    if (_isLoadingMorePosts) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_loadMoreError != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Column(
+          children: [
+            Text(
+              'دریافت ادامه پست‌ها ناموفق بود.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            TextButton.icon(
+              onPressed: _loadMorePosts,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('تلاش دوباره'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return const SizedBox(height: 20);
   }
 
   Widget _buildUnavailableTab(
