@@ -41,6 +41,27 @@ class UserPublicProfileRepository {
               AND following.deleted_at IS NULL
           ) AS following_count,
 
+          (
+            SELECT COUNT(*)
+            FROM public.posts AS p
+            WHERE p.user_id = u.id
+              AND p.status = 'published'
+              AND p.deleted_at IS NULL
+          ) AS posts_count,
+
+          (
+            SELECT COUNT(DISTINCT mp.id)
+            FROM public.memorial_profiles AS mp
+            LEFT JOIN public.memorial_members AS mm
+              ON mm.memorial_profile_id = mp.id
+              AND mm.user_id = u.id
+            WHERE mp.deleted_at IS NULL
+              AND (
+                mp.created_by_user_id = u.id
+                OR mm.user_id IS NOT NULL
+              )
+          ) AS memorial_profiles_count,
+
           EXISTS (
             SELECT 1
             FROM public.user_follows
@@ -108,7 +129,6 @@ class UserPublicProfileRepository {
 
     final isPrivate = data['is_private'] == true;
     final isFollowing = data['is_following'] == true;
-
     final isOwnProfile = viewerUserId == targetUserId;
 
     final canViewPosts = isOwnProfile || !isPrivate || isFollowing;
@@ -125,6 +145,8 @@ class UserPublicProfileRepository {
         'created_at': data['created_at']?.toString(),
         'followers_count': _toInt(data['followers_count']),
         'following_count': _toInt(data['following_count']),
+        'posts_count': _toInt(data['posts_count']),
+        'memorial_profiles_count': _toInt(data['memorial_profiles_count']),
         'can_view_posts': canViewPosts,
         'relationship': {
           'is_following': isFollowing,

@@ -1,27 +1,25 @@
+
 import 'package:flutter/material.dart';
 
 import '../../../auth/data/auth_repository.dart';
 import '../../../auth/models/auth_user.dart';
+import '../../../comments/presentation/screens/post_comments_screen.dart';
 import '../../../posts/data/posts_repository.dart';
 import '../../../posts/models/post.dart';
 import '../../../posts/presentation/widgets/post_card.dart';
-import '../../../comments/presentation/screens/post_comments_screen.dart';
+import '../../data/profile_repository.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
     super.key,
     required this.user,
     required this.authRepository,
-    required this.isLoggingOut,
     required this.onEditProfile,
-    required this.onLogout,
   });
 
   final AuthUser user;
   final AuthRepository authRepository;
-  final bool isLoggingOut;
   final VoidCallback onEditProfile;
-  final VoidCallback onLogout;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -33,15 +31,24 @@ class _ProfileScreenState extends State<ProfileScreen>
   late final ScrollController _postsScrollController;
 
   final PostsRepository _postsRepository = PostsRepository();
+  final ProfileRepository _profileRepository = ProfileRepository();
 
   List<Post> _posts = [];
+  List<Map<String, dynamic>> _memorialProfiles = [];
+
+  int _followersCount = 0;
+  int _followingCount = 0;
+  int _postsCount = 0;
+  int _memorialProfilesCount = 0;
 
   bool _isLoadingPosts = true;
   bool _isLoadingMorePosts = false;
   bool _hasMorePosts = false;
+  bool _isLoadingProfileData = true;
 
   String? _postsError;
   String? _loadMoreError;
+  String? _profileDataError;
   String? _nextCursor;
 
   @override
@@ -49,10 +56,12 @@ class _ProfileScreenState extends State<ProfileScreen>
     super.initState();
 
     _tabController = TabController(length: 3, vsync: this);
+
     _postsScrollController = ScrollController()
       ..addListener(_handlePostsScroll);
 
     _loadMyPosts();
+    _loadProfileData();
   }
 
   @override
@@ -61,12 +70,14 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     if (oldWidget.user.id != widget.user.id) {
       _loadMyPosts();
+      _loadProfileData();
     }
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+
     _postsScrollController
       ..removeListener(_handlePostsScroll)
       ..dispose();
@@ -82,9 +93,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       return;
     }
 
-    final position = _postsScrollController.position;
-
-    if (position.extentAfter < 400) {
+    if (_postsScrollController.position.extentAfter < 400) {
       _loadMorePosts();
     }
   }
@@ -93,10 +102,83 @@ class _ProfileScreenState extends State<ProfileScreen>
     final token = await widget.authRepository.readAccessToken();
 
     if (token == null || token.isEmpty) {
-      throw Exception('نشست کاربری معتبر نیست. لطفاً دوباره وارد شوید.');
+      throw Exception(
+        'نشست کاربری معتبر نیست. لطفاً دوباره وارد شوید.',
+      );
     }
 
     return token;
+  }
+
+  Future<void> _refreshProfile() async {
+    await Future.wait([
+      _loadMyPosts(),
+      _loadProfileData(),
+    ]);
+  }
+
+  Future<void> _loadProfileData() async {
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingProfileData = true;
+      _profileDataError = null;
+    });
+
+    try {
+      final token = await _requireAccessToken();
+
+      final results = await Future.wait([
+        _profileRepository.getUserProfile(
+          userId: widget.user.id,
+          token: token,
+        ),
+        _profileRepository.getMyMemorialProfiles(
+          token: token,
+        ),
+      ]);
+
+      final profile = results[0] as Map<String, dynamic>;
+      final memorialProfiles =
+          results[1] as List<Map<String, dynamic>>;
+
+      if (profile['status'] == 'blocked') {
+        throw Exception('دسترسی به اطلاعات این حساب امکان‌پذیر نیست.');
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _followersCount = _readCount(profile['followers_count']);
+        _followingCount = _readCount(profile['following_count']);
+        _postsCount = _readCount(profile['posts_count']);
+
+        _memorialProfiles = memorialProfiles;
+
+        _memorialProfilesCount = _readCount(
+          profile['memorial_profiles_count'],
+        );
+
+        // تعداد فهرست دریافت‌شده مرجع جایگزین در صورت نبود مقدار آماری است.
+        if (profile['memorial_profiles_count'] == null) {
+          _memorialProfilesCount = memorialProfiles.length;
+        }
+
+        _isLoadingProfileData = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _profileDataError = error.toString();
+        _isLoadingProfileData = false;
+      });
+    }
+  }
+
+  int _readCount(dynamic value) {
+    if (value is num) return value.toInt();
+    return 0;
   }
 
   Future<void> _loadMyPosts() async {
@@ -115,7 +197,10 @@ class _ProfileScreenState extends State<ProfileScreen>
     try {
       final token = await _requireAccessToken();
 
-      final page = await _postsRepository.getOwnPosts(token: token, limit: 20);
+      final page = await _postsRepository.getOwnPosts(
+        token: token,
+        limit: 20,
+      );
 
       if (!mounted) return;
 
@@ -175,7 +260,10 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  Future<void> _handleLikeChanged(Post post, bool isLiked) async {
+  Future<void> _handleLikeChanged(
+    Post post,
+    bool isLiked,
+  ) async {
     final token = await _requireAccessToken();
 
     final result = await _postsRepository.setPostLike(
@@ -212,7 +300,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     return Directionality(
       textDirection: TextDirection.rtl,
       child: RefreshIndicator(
-        onRefresh: _loadMyPosts,
+        onRefresh: _refreshProfile,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.only(bottom: 32),
@@ -226,43 +314,15 @@ class _ProfileScreenState extends State<ProfileScreen>
                 controller: _tabController,
                 children: [
                   _buildPostsTab(context),
-                  _buildUnavailableTab(
-                    context,
-                    icon: Icons.favorite_border_rounded,
-                    title: 'عزیزان من',
-                    message: 'پروفایل‌های یادبود مرتبط با حساب شما در این بخش نمایش داده می‌شوند.',
-                  ),
+                  _buildMemorialProfilesTab(context),
                   _buildUnavailableTab(
                     context,
                     icon: Icons.event_note_rounded,
                     title: 'رویدادهای من',
-                    message: 'رویدادهای متعلق به حساب شما در این بخش نمایش داده می‌شوند.',
+                    message:
+                        'رویدادهای متعلق به حساب شما در این بخش نمایش داده می‌شوند.',
                   ),
                 ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: OutlinedButton.icon(
-                onPressed: widget.isLoggingOut ? null : widget.onLogout,
-                icon: widget.isLoggingOut
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.logout_rounded),
-                label: Text(
-                  widget.isLoggingOut ? 'در حال خروج...' : 'خروج از حساب',
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Theme.of(context).colorScheme.error,
-                  side: BorderSide(
-                    color: Theme.of(context).colorScheme.error
-                        .withValues(alpha: 0.5),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
               ),
             ),
           ],
@@ -274,6 +334,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   Widget _buildProfileHeader(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+
     final bio = widget.user.bio?.trim();
     final hasBio = bio != null && bio.isNotEmpty;
 
@@ -289,7 +350,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                 radius: 36,
                 backgroundColor: colors.primaryContainer,
                 foregroundColor: colors.onPrimaryContainer,
-                child: const Icon(Icons.person_rounded, size: 38),
+                child: const Icon(
+                  Icons.person_rounded,
+                  size: 38,
+                ),
               ),
               const Spacer(),
               OutlinedButton(
@@ -324,12 +388,18 @@ class _ProfileScreenState extends State<ProfileScreen>
           _buildPrivacyStatus(context),
           const SizedBox(height: 12),
           Text(
-            hasBio ? bio : 'هنوز بیوگرافی‌ای برای پروفایل نوشته نشده است.',
+            hasBio
+                ? bio
+                : 'هنوز بیوگرافی‌ای برای پروفایل نوشته نشده است.',
             style: theme.textTheme.bodyMedium?.copyWith(
               height: 1.8,
-              color: hasBio ? colors.onSurface : colors.onSurfaceVariant,
+              color: hasBio
+                  ? colors.onSurface
+                  : colors.onSurfaceVariant,
             ),
           ),
+          const SizedBox(height: 20),
+          _buildProfileStats(context),
           const SizedBox(height: 18),
           Divider(
             height: 1,
@@ -340,12 +410,78 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  Widget _buildProfileStats(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    if (_isLoadingProfileData) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+
+    if (_profileDataError != null) {
+      return Center(
+        child: TextButton.icon(
+          onPressed: _loadProfileData,
+          icon: const Icon(Icons.refresh_rounded, size: 18),
+          label: const Text('دریافت آمار ناموفق بود؛ تلاش دوباره'),
+        ),
+      );
+    }
+
+    final stats = [
+      ('پست‌ها', _postsCount),
+      ('دنبال‌کننده', _followersCount),
+      ('دنبال‌شونده', _followingCount),
+      ('عزیزان آسمانی', _memorialProfilesCount),
+    ];
+
+    return Row(
+      children: [
+        for (final stat in stats)
+          Expanded(
+            child: Column(
+              children: [
+                Text(
+                  stat.$2.toString(),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: colors.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  stat.$1,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildPrivacyStatus(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final isPrivate = widget.user.isPrivate;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 6,
+      ),
       decoration: BoxDecoration(
         color: colors.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(20),
@@ -354,7 +490,9 @@ class _ProfileScreenState extends State<ProfileScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            isPrivate ? Icons.lock_outline_rounded : Icons.public_rounded,
+            isPrivate
+                ? Icons.lock_outline_rounded
+                : Icons.public_rounded,
             size: 15,
             color: colors.onSurfaceVariant,
           ),
@@ -381,7 +519,10 @@ class _ProfileScreenState extends State<ProfileScreen>
       unselectedLabelColor: colors.onSurfaceVariant,
       indicatorColor: colors.primary,
       indicatorWeight: 3,
-      labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+      labelStyle: const TextStyle(
+        fontWeight: FontWeight.w700,
+        fontSize: 13,
+      ),
       tabs: const [
         Tab(text: 'پست‌ها'),
         Tab(text: 'عزیزان من'),
@@ -392,7 +533,9 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Widget _buildPostsTab(BuildContext context) {
     if (_isLoadingPosts) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
     }
 
     if (_postsError != null) {
@@ -435,7 +578,9 @@ class _ProfileScreenState extends State<ProfileScreen>
         return PostCard(
           key: ValueKey(post.id),
           post: post,
-          onLikeChanged: (isLiked) => _handleLikeChanged(post, isLiked),
+          onLikeChanged: (isLiked) {
+            return _handleLikeChanged(post, isLiked);
+          },
           onCommentsTap: () async {
             await Navigator.of(context).push<bool>(
               MaterialPageRoute<bool>(
@@ -453,10 +598,88 @@ class _ProfileScreenState extends State<ProfileScreen>
           onShareTap: () {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('اشتراک‌گذاری در مرحله بعد اضافه می‌شود.'),
+                content: Text(
+                  'اشتراک‌گذاری در مرحله بعد اضافه می‌شود.',
+                ),
               ),
             );
           },
+        );
+      },
+    );
+  }
+
+  Widget _buildMemorialProfilesTab(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    if (_isLoadingProfileData) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    if (_profileDataError != null) {
+      return _buildMessageState(
+        context,
+        icon: Icons.cloud_off_outlined,
+        title: 'دریافت اطلاعات ناموفق بود',
+        message: _profileDataError!,
+        action: TextButton(
+          onPressed: _loadProfileData,
+          child: const Text('تلاش دوباره'),
+        ),
+      );
+    }
+
+    if (_memorialProfiles.isEmpty) {
+      return _buildMessageState(
+        context,
+        icon: Icons.favorite_border_rounded,
+        title: 'هنوز پروفایل یادبودی ندارید',
+        message:
+            'پروفایل عزیزان آسمانی که ساخته‌اید یا دنبال می‌کنید، اینجا نمایش داده می‌شود.',
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: _memorialProfiles.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        final profile = _memorialProfiles[index];
+
+        final name =
+            profile['full_name']?.toString() ?? 'بدون نام';
+
+        final relationship =
+            profile['relationship']?.toString();
+
+        final isCreator = profile['is_creator'] == true;
+
+        return Card(
+          elevation: 0,
+          color: colors.surfaceContainerLow,
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: colors.primaryContainer,
+              child: Icon(
+                Icons.favorite_rounded,
+                color: colors.onPrimaryContainer,
+              ),
+            ),
+            title: Text(
+              name,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            subtitle: Text(
+              isCreator
+                  ? 'سازنده پروفایل یادبود'
+                  : 'نسبت: ${relationship ?? 'مشخص نشده'}',
+            ),
+          ),
         );
       },
     );
@@ -466,7 +689,9 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (_isLoadingMorePosts) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 20),
-        child: Center(child: CircularProgressIndicator()),
+        child: Center(
+          child: CircularProgressIndicator(),
+        ),
       );
     }
 
@@ -522,7 +747,11 @@ class _ProfileScreenState extends State<ProfileScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 44, color: colors.primary),
+            Icon(
+              icon,
+              size: 44,
+              color: colors.primary,
+            ),
             const SizedBox(height: 14),
             Text(
               title,
@@ -540,7 +769,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                 color: colors.onSurfaceVariant,
               ),
             ),
-            if (action != null) ...[const SizedBox(height: 12), action],
+            if (action != null) ...[
+              const SizedBox(height: 12),
+              action,
+            ],
           ],
         ),
       ),

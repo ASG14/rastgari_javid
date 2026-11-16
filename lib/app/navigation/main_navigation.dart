@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 
 import 'widgets/app_bottom_navigation.dart';
@@ -52,6 +53,7 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   void initState() {
     super.initState();
+
     _user = widget.user;
     _refreshUnreadNotificationCount();
   }
@@ -62,7 +64,8 @@ class _MainNavigationState extends State<MainNavigation> {
     _isLoadingUnreadCount = true;
 
     try {
-      final count = await _notificationRepository.getUnreadCount();
+      final count =
+          await _notificationRepository.getUnreadCount();
 
       if (!mounted) return;
 
@@ -79,8 +82,9 @@ class _MainNavigationState extends State<MainNavigation> {
   Future<void> _openNotifications() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) =>
-            NotificationsScreen(repository: _notificationRepository),
+        builder: (_) => NotificationsScreen(
+          repository: _notificationRepository,
+        ),
       ),
     );
 
@@ -127,7 +131,9 @@ class _MainNavigationState extends State<MainNavigation> {
 
       Navigator.of(context).pushAndRemoveUntil<void>(
         MaterialPageRoute<void>(
-          builder: (_) => LoginScreen(authRepository: widget.authRepository),
+          builder: (_) => LoginScreen(
+            authRepository: widget.authRepository,
+          ),
         ),
         (route) => false,
       );
@@ -136,7 +142,9 @@ class _MainNavigationState extends State<MainNavigation> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('خروج از حساب با خطا مواجه شد: $error'),
+          content: Text(
+            'خروج از حساب با خطا مواجه شد: $error',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -170,18 +178,30 @@ class _MainNavigationState extends State<MainNavigation> {
       icon: Stack(
         clipBehavior: Clip.none,
         children: [
-          const Icon(Icons.notifications_none_rounded, size: 27),
+          const Icon(
+            Icons.notifications_none_rounded,
+            size: 27,
+          ),
           if (_unreadNotificationCount > 0)
             Positioned(
               top: -5,
               right: -7,
               child: Container(
-                constraints: const BoxConstraints(minWidth: 17, minHeight: 17),
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                constraints: const BoxConstraints(
+                  minWidth: 17,
+                  minHeight: 17,
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 4,
+                  vertical: 1,
+                ),
                 decoration: BoxDecoration(
                   color: colors.error,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: colors.surface, width: 1.5),
+                  border: Border.all(
+                    color: colors.surface,
+                    width: 1.5,
+                  ),
                 ),
                 alignment: Alignment.center,
                 child: Text(
@@ -197,6 +217,113 @@ class _MainNavigationState extends State<MainNavigation> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildProfileMenuButton() {
+    return Builder(
+      builder: (buttonContext) {
+        return IconButton(
+          tooltip: 'منوی پروفایل',
+          onPressed: () {
+            Scaffold.of(buttonContext).openDrawer();
+          },
+          icon: const Icon(Icons.menu_rounded),
+        );
+      },
+    );
+  }
+
+  Widget _buildProfileDrawer() {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                20,
+                28,
+                20,
+                20,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundColor: colors.primaryContainer,
+                    child: Icon(
+                      Icons.person_rounded,
+                      size: 34,
+                      color: colors.onPrimaryContainer,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    _user.displayName,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '@${_user.username}',
+                    textDirection: TextDirection.ltr,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('ویرایش پروفایل'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _openEditProfile();
+              },
+            ),
+            const Spacer(),
+            const Divider(),
+            ListTile(
+              enabled: !_isLoggingOut,
+              leading: _isLoggingOut
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : Icon(
+                      Icons.logout_rounded,
+                      color: colors.error,
+                    ),
+              title: Text(
+                _isLoggingOut
+                    ? 'در حال خروج...'
+                    : 'خروج از حساب',
+                style: TextStyle(
+                  color: colors.error,
+                ),
+              ),
+              onTap: _isLoggingOut
+                  ? null
+                  : () {
+                      Navigator.of(context).pop();
+                      _logout();
+                    },
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
       ),
     );
   }
@@ -218,23 +345,30 @@ class _MainNavigationState extends State<MainNavigation> {
       ProfileScreen(
         user: _user,
         authRepository: widget.authRepository,
-        isLoggingOut: _isLoggingOut,
         onEditProfile: _openEditProfile,
-        onLogout: _logout,
       ),
     ];
 
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
+        drawer: _currentIndex == 4
+            ? _buildProfileDrawer()
+            : null,
         appBar: AppBar(
           title: Text(_titles[_currentIndex]),
           actions: [
-            if (_currentIndex == 0) _buildNotificationButton(),
+            if (_currentIndex == 0)
+              _buildNotificationButton(),
+            if (_currentIndex == 4)
+              _buildProfileMenuButton(),
             const SizedBox(width: 4),
           ],
         ),
-        body: IndexedStack(index: _currentIndex, children: pages),
+        body: IndexedStack(
+          index: _currentIndex,
+          children: pages,
+        ),
         bottomNavigationBar: AppBottomNavigation(
           currentIndex: _currentIndex,
           onDestinationSelected: (index) {
