@@ -1,4 +1,5 @@
-import 'dart:developer' as developer;
+
+import 'dart:io';
 
 import 'package:backend/src/features/auth/application/auth_service.dart';
 import 'package:backend/src/features/auth/data/auth_repository.dart';
@@ -8,6 +9,25 @@ import 'package:dart_frog/dart_frog.dart';
 
 final _authService = AuthService(AuthRepository());
 final _userService = UserService(UserRepository());
+
+/// Converts values that are not directly JSON-encodable.
+Object? _toJsonSafe(Object? value) {
+  if (value is DateTime) {
+    return value.toIso8601String();
+  }
+
+  if (value is Map) {
+    return value.map(
+      (key, item) => MapEntry(key.toString(), _toJsonSafe(item)),
+    );
+  }
+
+  if (value is Iterable) {
+    return value.map(_toJsonSafe).toList();
+  }
+
+  return value;
+}
 
 Future<Response> onRequest(RequestContext context) async {
   final method = context.request.method.value;
@@ -54,7 +74,7 @@ Future<Response> onRequest(RequestContext context) async {
       return Response.json(
         body: {
           'message': 'اطلاعات پروفایل دریافت شد.',
-          'data': currentUser,
+          'data': _toJsonSafe(currentUser),
         },
       );
     }
@@ -137,7 +157,7 @@ Future<Response> onRequest(RequestContext context) async {
     return Response.json(
       body: {
         'message': 'پروفایل با موفقیت به‌روزرسانی شد.',
-        'data': updatedProfile,
+        'data': _toJsonSafe(updatedProfile),
       },
     );
   } on AuthException catch (error) {
@@ -151,12 +171,10 @@ Future<Response> onRequest(RequestContext context) async {
       body: {'error': error.message},
     );
   } catch (error, stackTrace) {
-    developer.log(
-      'User profile request failed',
-      error: error,
-      stackTrace: stackTrace,
-      name: 'users.me',
-    );
+    stderr.writeln('========== USER PROFILE ERROR ==========');
+    stderr.writeln('Error: $error');
+    stderr.writeln('StackTrace: $stackTrace');
+    stderr.writeln('========================================');
 
     return Response.json(
       statusCode: 500,
