@@ -43,6 +43,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   String? _postsError;
   String? _nextCursor;
 
+  int _postsRequestGeneration = 0;
+
   bool get _isOwnProfile => widget.userId == widget.currentUserId;
 
   bool get _isPrivate => _profile?['is_private'] == true;
@@ -120,11 +122,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       if (profile['can_view_posts'] == true) {
         await _loadPosts();
       } else {
+        ++_postsRequestGeneration;
+
         setState(() {
           _posts = [];
           _hasMore = false;
           _nextCursor = null;
           _postsError = null;
+          _isLoadingPosts = false;
         });
       }
     } catch (error) {
@@ -139,6 +144,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
   Future<void> _loadPosts() async {
     if (!mounted || _isLoadingPosts) return;
+
+    final generation = ++_postsRequestGeneration;
 
     setState(() {
       _isLoadingPosts = true;
@@ -155,7 +162,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         limit: _pageSize,
       );
 
-      if (!mounted) return;
+      if (!mounted || generation != _postsRequestGeneration) return;
 
       setState(() {
         _posts = page.posts;
@@ -164,7 +171,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         _isLoadingPosts = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _postsRequestGeneration) return;
 
       setState(() {
         _postsError = error.toString();
@@ -174,9 +181,16 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 
   Future<void> _loadMorePosts() async {
-    if (!mounted || _isLoadingMore || !_hasMore || _nextCursor == null) {
+    if (!mounted ||
+        _isLoadingMore ||
+        _isLoadingPosts ||
+        !_hasMore ||
+        _nextCursor == null) {
       return;
     }
+
+    final generation = _postsRequestGeneration;
+    final requestedCursor = _nextCursor!;
 
     setState(() {
       _isLoadingMore = true;
@@ -190,10 +204,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         userId: widget.userId,
         token: token,
         limit: _pageSize,
-        cursor: _nextCursor,
+        cursor: requestedCursor,
       );
 
-      if (!mounted) return;
+      if (!mounted || generation != _postsRequestGeneration) return;
+
+      if (page.hasMore && page.nextCursor == requestedCursor) {
+        throw const FormatException('نشانگر صفحه بعد تغییر نکرده است.');
+      }
 
       final existingIds = _posts.map((post) => post.id).toSet();
       final newPosts = page.posts.where((post) => existingIds.add(post.id));
@@ -205,45 +223,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         _isLoadingMore = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _postsRequestGeneration) return;
 
       setState(() {
         _postsError = error.toString();
         _isLoadingMore = false;
       });
     }
-  }
-
-  Future<void> _handleLikeChanged(Post post, bool isLiked) async {
-    final token = await _readToken();
-
-    final result = await _postsRepository.setPostLike(
-      postId: post.id,
-      isLiked: isLiked,
-      token: token,
-    );
-
-    final serverIsLiked = result['is_liked'];
-    final serverLikeCount = result['likes_count'];
-
-    if (serverIsLiked is! bool || serverLikeCount is! num) {
-      throw const FormatException(
-        'پاسخ سرور برای به‌روزرسانی همدلی معتبر نیست.',
-      );
-    }
-
-    if (!mounted) return;
-
-    setState(() {
-      _posts = _posts.map((item) {
-        if (item.id != post.id) return item;
-
-        return item.copyWith(
-          isLiked: serverIsLiked,
-          likeCount: serverLikeCount.toInt(),
-        );
-      }).toList();
-    });
   }
 
   Future<void> _handleRelationshipAction() async {
@@ -327,6 +313,37 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     if (value is num) return value.toInt();
     if (value is String) return int.tryParse(value) ?? 0;
     return 0;
+  }
+
+  void _openAuthorProfile(Post post) {
+    final authorId = int.tryParse(post.author.id);
+
+    if (authorId == null || authorId < 1) {
+      _showMessage('شناسه نویسنده معتبر نیست.');
+      return;
+    }
+
+    if (authorId == widget.userId) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => UserProfileScreen(
+          userId: authorId,
+          currentUserId: widget.currentUserId,
+          authRepository: widget.authRepository,
+        ),
+      ),
+    );
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+      );
   }
 
   Widget _buildRelationshipButton() {
@@ -517,28 +534,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           PostCard(
             key: ValueKey(post.id),
             post: post,
-            onAuthorTap: () {
-              final authorId = int.tryParse(post.author.id);
-
-              if (authorId == null ||
-                  authorId < 1 ||
-                  authorId == widget.userId) {
-                return;
-              }
-
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => UserProfileScreen(
-                    userId: authorId,
-                    currentUserId: widget.currentUserId,
-                    authRepository: widget.authRepository,
-                  ),
-                ),
-              );
-            },
-            onLikeChanged: (isLiked) {
-              return _handleLikeChanged(post, isLiked);
-            },
+            authRepository: widget.authRepository,
+            onAuthorTap: () => _openAuthorProfile(post),
           ),
         if (_postsError != null)
           Padding(
@@ -577,6 +574,83 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               ),
             ),
           ),
+      ],
+    );
+  }
+
+  Widget _buildProfileHeader() {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    final displayName = _profile?['display_name']?.toString() ?? 'کاربر';
+    final username = _profile?['username']?.toString() ?? '';
+    final bio = _profile?['bio']?.toString().trim() ?? '';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            CircleAvatar(
+              radius: 39,
+              backgroundColor: colors.primaryContainer,
+              foregroundColor: colors.onPrimaryContainer,
+              child: const Icon(Icons.person_rounded, size: 42),
+            ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    displayName,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    '@$username',
+                    textDirection: TextDirection.ltr,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _isPrivate
+                            ? Icons.lock_outline_rounded
+                            : Icons.public_rounded,
+                        size: 15,
+                        color: colors.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        _isPrivate ? 'حساب خصوصی' : 'حساب عمومی',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (bio.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          Text(bio, style: theme.textTheme.bodyMedium?.copyWith(height: 1.9)),
+        ],
+        const SizedBox(height: 22),
+        _buildStats(),
+        if (!_isOwnProfile) ...[
+          const SizedBox(height: 22),
+          _buildRelationshipButton(),
+        ],
       ],
     );
   }
@@ -625,75 +699,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
                   children: [
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 39,
-                          backgroundColor: colors.primaryContainer,
-                          foregroundColor: colors.onPrimaryContainer,
-                          child: const Icon(Icons.person_rounded, size: 42),
-                        ),
-                        const SizedBox(width: 15),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _profile?['display_name']?.toString() ??
-                                    'کاربر',
-                                style: theme.textTheme.titleLarge?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              const SizedBox(height: 5),
-                              Text(
-                                '@${_profile?['username'] ?? ''}',
-                                textDirection: TextDirection.ltr,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: colors.onSurfaceVariant,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    _isPrivate
-                                        ? Icons.lock_outline_rounded
-                                        : Icons.public_rounded,
-                                    size: 15,
-                                    color: colors.onSurfaceVariant,
-                                  ),
-                                  const SizedBox(width: 5),
-                                  Text(
-                                    _isPrivate ? 'حساب خصوصی' : 'حساب عمومی',
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      color: colors.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    if ((_profile?['bio'] as String?)?.trim().isNotEmpty ??
-                        false) ...[
-                      const SizedBox(height: 18),
-                      Text(
-                        _profile!['bio'] as String,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          height: 1.9,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 22),
-                    _buildStats(),
-                    if (!_isOwnProfile) ...[
-                      const SizedBox(height: 22),
-                      _buildRelationshipButton(),
-                    ],
+                    _buildProfileHeader(),
                     const SizedBox(height: 24),
                     Divider(color: colors.outlineVariant),
                     const SizedBox(height: 12),

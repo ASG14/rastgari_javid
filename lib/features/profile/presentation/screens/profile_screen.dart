@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../../auth/data/auth_repository.dart';
 import '../../../auth/models/auth_user.dart';
-import '../../../comments/presentation/screens/post_comments_screen.dart';
 import '../../../posts/data/posts_repository.dart';
 import '../../../posts/models/post.dart';
 import '../../../posts/presentation/widgets/post_card.dart';
@@ -49,6 +48,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   String? _loadMoreError;
   String? _profileDataError;
   String? _nextCursor;
+
+  int _postsRequestGeneration = 0;
 
   @override
   void initState() {
@@ -143,12 +144,9 @@ class _ProfileScreenState extends State<ProfileScreen>
 
         _memorialProfiles = memorialProfiles;
 
-        _memorialProfilesCount = _readCount(profile['memorial_profiles_count']);
-
-        // تعداد فهرست دریافت‌شده مرجع جایگزین در صورت نبود مقدار آماری است.
-        if (profile['memorial_profiles_count'] == null) {
-          _memorialProfilesCount = memorialProfiles.length;
-        }
+        _memorialProfilesCount = profile['memorial_profiles_count'] == null
+            ? memorialProfiles.length
+            : _readCount(profile['memorial_profiles_count']);
 
         _isLoadingProfileData = false;
       });
@@ -164,11 +162,14 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   int _readCount(dynamic value) {
     if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
     return 0;
   }
 
   Future<void> _loadMyPosts() async {
     if (!mounted) return;
+
+    final generation = ++_postsRequestGeneration;
 
     setState(() {
       _isLoadingPosts = true;
@@ -185,7 +186,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       final page = await _postsRepository.getOwnPosts(token: token, limit: 20);
 
-      if (!mounted) return;
+      if (!mounted || generation != _postsRequestGeneration) return;
 
       setState(() {
         _posts = page.posts;
@@ -194,7 +195,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         _isLoadingPosts = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _postsRequestGeneration) return;
 
       setState(() {
         _postsError = error.toString();
@@ -211,6 +212,9 @@ class _ProfileScreenState extends State<ProfileScreen>
       return;
     }
 
+    final generation = _postsRequestGeneration;
+    final requestedCursor = _nextCursor!;
+
     setState(() {
       _isLoadingMorePosts = true;
       _loadMoreError = null;
@@ -222,57 +226,32 @@ class _ProfileScreenState extends State<ProfileScreen>
       final page = await _postsRepository.getOwnPosts(
         token: token,
         limit: 20,
-        cursor: _nextCursor,
+        cursor: requestedCursor,
       );
 
-      if (!mounted) return;
+      if (!mounted || generation != _postsRequestGeneration) return;
+
+      if (page.hasMore && page.nextCursor == requestedCursor) {
+        throw const FormatException('نشانگر صفحه بعد تغییر نکرده است.');
+      }
 
       setState(() {
-        _posts = [..._posts, ...page.posts];
+        final existingIds = _posts.map((post) => post.id).toSet();
+        final newPosts = page.posts.where((post) => existingIds.add(post.id));
+
+        _posts = [..._posts, ...newPosts];
         _hasMorePosts = page.hasMore;
         _nextCursor = page.nextCursor;
         _isLoadingMorePosts = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _postsRequestGeneration) return;
 
       setState(() {
         _loadMoreError = error.toString();
         _isLoadingMorePosts = false;
       });
     }
-  }
-
-  Future<void> _handleLikeChanged(Post post, bool isLiked) async {
-    final token = await _requireAccessToken();
-
-    final result = await _postsRepository.setPostLike(
-      postId: post.id,
-      isLiked: isLiked,
-      token: token,
-    );
-
-    final serverIsLiked = result['is_liked'];
-    final serverLikeCount = result['likes_count'];
-
-    if (serverIsLiked is! bool || serverLikeCount is! num) {
-      throw const FormatException(
-        'پاسخ سرور برای به‌روزرسانی همدلی معتبر نیست.',
-      );
-    }
-
-    if (!mounted) return;
-
-    setState(() {
-      _posts = _posts.map((item) {
-        if (item.id != post.id) return item;
-
-        return item.copyWith(
-          isLiked: serverIsLiked,
-          likeCount: serverLikeCount.toInt(),
-        );
-      }).toList();
-    });
   }
 
   @override
@@ -540,30 +519,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         return PostCard(
           key: ValueKey(post.id),
           post: post,
-          onLikeChanged: (isLiked) {
-            return _handleLikeChanged(post, isLiked);
-          },
-          onCommentsTap: () async {
-            await Navigator.of(context).push<bool>(
-              MaterialPageRoute<bool>(
-                builder: (_) => PostCommentsScreen(
-                  post: post,
-                  authRepository: widget.authRepository,
-                ),
-              ),
-            );
-
-            if (mounted) {
-              await _loadMyPosts();
-            }
-          },
-          onShareTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('اشتراک‌گذاری در مرحله بعد اضافه می‌شود.'),
-              ),
-            );
-          },
+          authRepository: widget.authRepository,
         );
       },
     );
@@ -607,9 +563,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         final profile = _memorialProfiles[index];
 
         final name = profile['full_name']?.toString() ?? 'بدون نام';
-
         final relationship = profile['relationship']?.toString();
-
         final isCreator = profile['is_creator'] == true;
 
         return Card(

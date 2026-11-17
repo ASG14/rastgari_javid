@@ -1,21 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../../../auth/data/auth_repository.dart';
+import '../../../comments/data/comments_repository.dart';
+import '../../../comments/presentation/screens/post_comments_screen.dart';
+import '../../data/posts_repository.dart';
 import '../../models/post.dart';
 
 class PostCard extends StatefulWidget {
   const PostCard({
     super.key,
     required this.post,
-    this.onLikeChanged,
-    this.onCommentsTap,
-    this.onShareTap,
+    required this.authRepository,
     this.onAuthorTap,
   });
 
   final Post post;
-  final Future<void> Function(bool isLiked)? onLikeChanged;
-  final VoidCallback? onCommentsTap;
-  final VoidCallback? onShareTap;
+  final AuthRepository authRepository;
+
+  /// تنها مسئولیت واگذارشده به صفحه والد، مسیریابی به پروفایل نویسنده است.
   final VoidCallback? onAuthorTap;
 
   @override
@@ -23,29 +26,182 @@ class PostCard extends StatefulWidget {
 }
 
 class _PostCardState extends State<PostCard> {
+  final PostsRepository _postsRepository = PostsRepository();
+  final CommentsRepository _commentsRepository = CommentsRepository();
+
+  late Post _post;
+
   bool _isUpdatingLike = false;
+  bool _isOpeningComments = false;
+  bool _isSharing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _post = widget.post;
+  }
+
+  @override
+  void didUpdateWidget(covariant PostCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // اگر کارت با پست دیگری جایگزین شد، وضعیت داخلی نیز باید عوض شود.
+    // تغییرات یک پست یکسان از طرف والد نباید وضعیت محلی تعاملات را بازنویسی کند.
+    if (oldWidget.post.id != widget.post.id) {
+      _post = widget.post;
+    }
+  }
+
+  Future<String> _requireAccessToken() async {
+    final token = await widget.authRepository.readAccessToken();
+
+    if (token == null || token.isEmpty) {
+      throw Exception('برای انجام این کار ابتدا وارد حساب کاربری شوید.');
+    }
+
+    return token;
+  }
 
   Future<void> _toggleLike() async {
-    if (_isUpdatingLike || widget.onLikeChanged == null) return;
+    if (_isUpdatingLike) return;
 
     setState(() => _isUpdatingLike = true);
 
     try {
-      await widget.onLikeChanged!(!widget.post.isLiked);
-    } catch (error) {
+      final token = await _requireAccessToken();
+      final nextLikedState = !_post.isLiked;
+
+      final result = await _postsRepository.setPostLike(
+        postId: _post.id,
+        isLiked: nextLikedState,
+        token: token,
+      );
+
+      final serverPostId = result['post_id']?.toString();
+      final serverIsLiked = result['is_liked'];
+      final serverLikeCount = result['likes_count'];
+
+      if (serverIsLiked is! bool || serverLikeCount is! num) {
+        throw const FormatException(
+          'پاسخ سرور برای به‌روزرسانی همدلی معتبر نیست.',
+        );
+      }
+
+      if (serverPostId != null && serverPostId != _post.id) {
+        throw const FormatException(
+          'شناسه پست در پاسخ سرور با پست انتخاب‌شده مطابقت ندارد.',
+        );
+      }
+
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('تغییر وضعیت همدلی ناموفق بود: $error'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      setState(() {
+        _post = _post.copyWith(
+          isLiked: serverIsLiked,
+          likeCount: serverLikeCount.toInt(),
+        );
+      });
+    } catch (error) {
+      if (!mounted) return;
+      _showMessage('تغییر وضعیت همدلی ناموفق بود: ${_readableError(error)}');
     } finally {
       if (mounted) {
         setState(() => _isUpdatingLike = false);
       }
     }
+  }
+
+  Future<void> _openComments() async {
+    if (_isOpeningComments) return;
+
+    setState(() => _isOpeningComments = true);
+
+    try {
+      final createdComment = await Navigator.of(context).push<bool>(
+        MaterialPageRoute<bool>(
+          builder: (_) => PostCommentsScreen(
+            post: _post,
+            authRepository: widget.authRepository,
+          ),
+        ),
+      );
+
+      if (!mounted) return;
+
+      // تعداد گفتگوها از خود API دریافت می‌شود تا شمارنده مستقل از صفحه والد باشد.
+      try {
+        final token = await _requireAccessToken();
+        final comments = await _commentsRepository.getPostComments(
+          postId: _post.id,
+          token: token,
+        );
+
+        if (!mounted) return;
+
+        setState(() {
+          _post = _post.copyWith(commentCount: comments.length);
+        });
+      } catch (_) {
+        // اگر دریافت مجدد فهرست ممکن نبود، در صورت ثبت دیدگاه جدید
+        // حداقل شمارنده را به اندازه یک واحد به‌روزرسانی می‌کنیم.
+        if (createdComment == true && mounted) {
+          setState(() {
+            _post = _post.copyWith(commentCount: _post.commentCount + 1);
+          });
+        }
+      }
+    } catch (error) {
+      if (!mounted) return;
+      _showMessage('بازکردن گفتگوها ناموفق بود: ${_readableError(error)}');
+    } finally {
+      if (mounted) {
+        setState(() => _isOpeningComments = false);
+      }
+    }
+  }
+
+  Future<void> _sharePost() async {
+    if (_isSharing) return;
+
+    setState(() => _isSharing = true);
+
+    try {
+      final author = _post.author;
+      final shareText =
+          '${author.displayName} (@${author.username})\n\n${_post.content}';
+
+      await Clipboard.setData(ClipboardData(text: shareText));
+
+      if (!mounted) return;
+      _showMessage('متن نوشته کپی شد و می‌توانید آن را به اشتراک بگذارید.');
+    } catch (error) {
+      if (!mounted) return;
+      _showMessage('کپی نوشته ناموفق بود: ${_readableError(error)}');
+    } finally {
+      if (mounted) {
+        setState(() => _isSharing = false);
+      }
+    }
+  }
+
+  String _readableError(Object error) {
+    final message = error.toString();
+
+    if (message.startsWith('Exception: ')) {
+      return message.substring('Exception: '.length);
+    }
+
+    return message;
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+      );
   }
 
   String _formatTime(DateTime date) {
@@ -59,7 +215,9 @@ class _PostCardState extends State<PostCard> {
       return '${difference.inHours} ساعت پیش';
     }
     if (difference.inDays == 1) return 'دیروز';
-    if (difference.inDays < 7) return '${difference.inDays} روز پیش';
+    if (difference.inDays < 7) {
+      return '${difference.inDays} روز پیش';
+    }
 
     final day = date.day.toString().padLeft(2, '0');
     final month = date.month.toString().padLeft(2, '0');
@@ -69,7 +227,7 @@ class _PostCardState extends State<PostCard> {
   Widget _buildAuthor(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final author = widget.post.author;
+    final author = _post.author;
 
     return Material(
       color: Colors.transparent,
@@ -114,7 +272,7 @@ class _PostCardState extends State<PostCard> {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      '@${author.username} · ${_formatTime(widget.post.createdAt)}',
+                      '@${author.username} · ${_formatTime(_post.createdAt)}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
@@ -135,8 +293,9 @@ class _PostCardState extends State<PostCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final isLiked = widget.post.isLiked;
-    final likeCount = widget.post.likeCount;
+    final isLiked = _post.isLiked;
+    final likeCount = _post.likeCount;
+    final commentCount = _post.commentCount;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -175,7 +334,7 @@ class _PostCardState extends State<PostCard> {
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
             child: Text(
-              widget.post.content,
+              _post.content,
               textAlign: TextAlign.start,
               style: theme.textTheme.bodyMedium?.copyWith(
                 height: 1.95,
@@ -184,8 +343,8 @@ class _PostCardState extends State<PostCard> {
               ),
             ),
           ),
-          if (widget.post.mediaUrl != null && widget.post.mediaUrl!.isNotEmpty)
-            _PostMedia(url: widget.post.mediaUrl!),
+          if (_post.mediaUrl != null && _post.mediaUrl!.isNotEmpty)
+            _PostMedia(url: _post.mediaUrl!),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
             child: Row(
@@ -206,9 +365,9 @@ class _PostCardState extends State<PostCard> {
                   ),
                 ],
                 const Spacer(),
-                if (widget.post.commentCount > 0)
+                if (commentCount > 0)
                   Text(
-                    '${widget.post.commentCount} گفتگو',
+                    '$commentCount گفتگو',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: colors.onSurfaceVariant,
                     ),
@@ -240,16 +399,20 @@ class _PostCardState extends State<PostCard> {
                 ),
                 Expanded(
                   child: _ActionButton(
-                    icon: Icons.mode_comment_outlined,
-                    label: 'گفتگو',
-                    onTap: widget.onCommentsTap,
+                    icon: _isOpeningComments
+                        ? Icons.hourglass_top_rounded
+                        : Icons.mode_comment_outlined,
+                    label: _isOpeningComments ? 'در حال بارگذاری...' : 'گفتگو',
+                    onTap: _isOpeningComments ? null : _openComments,
                   ),
                 ),
                 Expanded(
                   child: _ActionButton(
-                    icon: Icons.ios_share_rounded,
-                    label: 'اشتراک',
-                    onTap: widget.onShareTap,
+                    icon: _isSharing
+                        ? Icons.hourglass_top_rounded
+                        : Icons.ios_share_rounded,
+                    label: _isSharing ? 'در حال آماده‌سازی...' : 'اشتراک',
+                    onTap: _isSharing ? null : _sharePost,
                   ),
                 ),
               ],
