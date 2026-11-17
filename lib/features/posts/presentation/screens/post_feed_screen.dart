@@ -8,6 +8,7 @@ import '../../../comments/presentation/screens/post_comments_screen.dart';
 import '../../data/posts_repository.dart';
 import '../../models/post.dart';
 import '../widgets/post_card.dart';
+import '../../../profile/presentation/screens/user_profile_screen.dart';
 
 class PostFeedScreen extends StatefulWidget {
   const PostFeedScreen({
@@ -327,6 +328,32 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
                 PostCard(
                   key: ValueKey(post.id),
                   post: post,
+                  onAuthorTap: () {
+                    final authorId = int.tryParse(post.author.id);
+
+                    if (authorId == null || authorId < 1) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('شناسه نویسنده معتبر نیست.'),
+                        ),
+                      );
+                      return;
+                    }
+
+                    if (authorId == widget.user.id) {
+                      return;
+                    }
+
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => UserProfileScreen(
+                          userId: authorId,
+                          currentUserId: widget.user.id,
+                          authRepository: widget.authRepository,
+                        ),
+                      ),
+                    );
+                  },
                   onLikeChanged: (isLiked) {
                     return _handleLikeChanged(post, isLiked);
                   },

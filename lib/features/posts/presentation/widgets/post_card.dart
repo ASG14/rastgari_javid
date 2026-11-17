@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 
 import '../../models/post.dart';
@@ -9,12 +10,14 @@ class PostCard extends StatefulWidget {
     this.onLikeChanged,
     this.onCommentsTap,
     this.onShareTap,
+    this.onAuthorTap,
   });
 
   final Post post;
   final Future<void> Function(bool isLiked)? onLikeChanged;
   final VoidCallback? onCommentsTap;
   final VoidCallback? onShareTap;
+  final VoidCallback? onAuthorTap;
 
   @override
   State<PostCard> createState() => _PostCardState();
@@ -64,11 +67,75 @@ class _PostCardState extends State<PostCard> {
     return '$day/$month/${date.year}';
   }
 
+  Widget _buildAuthor(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final author = widget.post.author;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: widget.onAuthorTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            children: [
+              _AuthorAvatar(
+                displayName: author.displayName,
+                avatarUrl: author.avatarUrl,
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            author.displayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: colors.onSurface,
+                            ),
+                          ),
+                        ),
+                        if (author.isVerified) ...[
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.verified_rounded,
+                            size: 16,
+                            color: colors.primary,
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '@${author.username} · ${_formatTime(widget.post.createdAt)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final author = widget.post.author;
     final isLiked = widget.post.isLiked;
     final likeCount = widget.post.likeCount;
 
@@ -96,50 +163,7 @@ class _PostCardState extends State<PostCard> {
             padding: const EdgeInsets.fromLTRB(16, 17, 16, 12),
             child: Row(
               children: [
-                _AuthorAvatar(
-                  displayName: author.displayName,
-                  avatarUrl: author.avatarUrl,
-                ),
-                const SizedBox(width: 11),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              author.displayName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: colors.onSurface,
-                              ),
-                            ),
-                          ),
-                          if (author.isVerified) ...[
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.verified_rounded,
-                              size: 16,
-                              color: colors.primary,
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        '@${author.username} · ${_formatTime(widget.post.createdAt)}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                Expanded(child: _buildAuthor(context)),
                 IconButton(
                   tooltip: 'گزینه‌های بیشتر',
                   onPressed: () {},
@@ -161,7 +185,8 @@ class _PostCardState extends State<PostCard> {
               ),
             ),
           ),
-          if (widget.post.mediaUrl != null && widget.post.mediaUrl!.isNotEmpty)
+          if (widget.post.mediaUrl != null &&
+              widget.post.mediaUrl!.isNotEmpty)
             _PostMedia(url: widget.post.mediaUrl!),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
@@ -208,8 +233,8 @@ class _PostCardState extends State<PostCard> {
                     icon: _isUpdatingLike
                         ? Icons.hourglass_top_rounded
                         : isLiked
-                        ? Icons.favorite_rounded
-                        : Icons.favorite_border_rounded,
+                            ? Icons.favorite_rounded
+                            : Icons.favorite_border_rounded,
                     label: _isUpdatingLike ? 'در حال ثبت...' : 'همدلی',
                     color: isLiked ? colors.error : null,
                     onTap: _isUpdatingLike ? null : _toggleLike,
