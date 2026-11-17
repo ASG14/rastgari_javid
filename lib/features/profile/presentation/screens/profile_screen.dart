@@ -6,6 +6,7 @@ import '../../../posts/data/posts_repository.dart';
 import '../../../posts/models/post.dart';
 import '../../../posts/presentation/widgets/post_card.dart';
 import '../../data/profile_repository.dart';
+import '../widgets/profile_stats.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
@@ -108,6 +109,12 @@ class _ProfileScreenState extends State<ProfileScreen>
     return token;
   }
 
+  int _readCount(dynamic value) {
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
   Future<void> _refreshProfile() async {
     await Future.wait([_loadMyPosts(), _loadProfileData()]);
   }
@@ -128,25 +135,42 @@ class _ProfileScreenState extends State<ProfileScreen>
         _profileRepository.getMyMemorialProfiles(token: token),
       ]);
 
-      final profile = results[0] as Map<String, dynamic>;
+      final response = results[0] as Map<String, dynamic>;
       final memorialProfiles = results[1] as List<Map<String, dynamic>>;
 
-      if (profile['status'] == 'blocked') {
+      if (response['status'] == 'blocked') {
         throw Exception('دسترسی به اطلاعات این حساب امکان‌پذیر نیست.');
       }
+
+      if (response['status'] != 'found') {
+        throw const FormatException('اطلاعات پروفایل در پاسخ سرور معتبر نیست.');
+      }
+
+      final profileData = response['profile'];
+
+      if (profileData is! Map) {
+        throw const FormatException('ساختار اطلاعات پروفایل معتبر نیست.');
+      }
+
+      final profile = Map<String, dynamic>.from(profileData);
+      final statsData = profile['stats'];
+
+      final stats = statsData is Map
+          ? Map<String, dynamic>.from(statsData)
+          : profile;
 
       if (!mounted) return;
 
       setState(() {
-        _followersCount = _readCount(profile['followers_count']);
-        _followingCount = _readCount(profile['following_count']);
-        _postsCount = _readCount(profile['posts_count']);
+        _followersCount = _readCount(stats['followers_count']);
+        _followingCount = _readCount(stats['following_count']);
+        _postsCount = _readCount(stats['posts_count']);
 
         _memorialProfiles = memorialProfiles;
 
-        _memorialProfilesCount = profile['memorial_profiles_count'] == null
+        _memorialProfilesCount = stats['memorial_profiles_count'] == null
             ? memorialProfiles.length
-            : _readCount(profile['memorial_profiles_count']);
+            : _readCount(stats['memorial_profiles_count']);
 
         _isLoadingProfileData = false;
       });
@@ -158,12 +182,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         _isLoadingProfileData = false;
       });
     }
-  }
-
-  int _readCount(dynamic value) {
-    if (value is num) return value.toInt();
-    if (value is String) return int.tryParse(value) ?? 0;
-    return 0;
   }
 
   Future<void> _loadMyPosts() async {
@@ -350,7 +368,15 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
           ),
           const SizedBox(height: 20),
-          _buildProfileStats(context),
+          ProfileStats(
+            postsCount: _postsCount,
+            followersCount: _followersCount,
+            followingCount: _followingCount,
+            memorialProfilesCount: _memorialProfilesCount,
+            isLoading: _isLoadingProfileData,
+            error: _profileDataError,
+            onRetry: _loadProfileData,
+          ),
           const SizedBox(height: 18),
           Divider(
             height: 1,
@@ -358,69 +384,6 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildProfileStats(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-
-    if (_isLoadingProfileData) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 12),
-        child: Center(
-          child: SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        ),
-      );
-    }
-
-    if (_profileDataError != null) {
-      return Center(
-        child: TextButton.icon(
-          onPressed: _loadProfileData,
-          icon: const Icon(Icons.refresh_rounded, size: 18),
-          label: const Text('دریافت آمار ناموفق بود؛ تلاش دوباره'),
-        ),
-      );
-    }
-
-    final stats = [
-      ('پست‌ها', _postsCount),
-      ('دنبال‌کننده', _followersCount),
-      ('دنبال‌شونده', _followingCount),
-      ('عزیزان آسمانی', _memorialProfilesCount),
-    ];
-
-    return Row(
-      children: [
-        for (final stat in stats)
-          Expanded(
-            child: Column(
-              children: [
-                Text(
-                  stat.$2.toString(),
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: colors.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  stat.$1,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: colors.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
     );
   }
 

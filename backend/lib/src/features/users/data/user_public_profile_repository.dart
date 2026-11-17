@@ -133,6 +133,13 @@ class UserPublicProfileRepository {
 
     final canViewPosts = isOwnProfile || !isPrivate || isFollowing;
 
+    final stats = {
+      'posts_count': _toInt(data['posts_count']),
+      'followers_count': _toInt(data['followers_count']),
+      'following_count': _toInt(data['following_count']),
+      'memorial_profiles_count': _toInt(data['memorial_profiles_count']),
+    };
+
     return {
       'status': 'found',
       'profile': {
@@ -143,10 +150,13 @@ class UserPublicProfileRepository {
         'avatar_storage_key': data['avatar_storage_key'],
         'is_private': isPrivate,
         'created_at': data['created_at']?.toString(),
-        'followers_count': _toInt(data['followers_count']),
-        'following_count': _toInt(data['following_count']),
-        'posts_count': _toInt(data['posts_count']),
-        'memorial_profiles_count': _toInt(data['memorial_profiles_count']),
+
+        // Structured statistics for the shared profile stats widget.
+        'stats': stats,
+
+        // Legacy fields retained for compatibility.
+        ...stats,
+
         'can_view_posts': canViewPosts,
         'relationship': {
           'is_following': isFollowing,

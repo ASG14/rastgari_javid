@@ -5,6 +5,7 @@ import '../../../posts/data/posts_repository.dart';
 import '../../../posts/models/post.dart';
 import '../../../posts/presentation/widgets/post_card.dart';
 import '../../data/user_profile_repository.dart';
+import '../widgets/profile_stats.dart';
 
 class UserProfileScreen extends StatefulWidget {
   const UserProfileScreen({
@@ -72,6 +73,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     return token;
   }
 
+  int _readCount(dynamic value) {
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
   Future<void> _loadProfile() async {
     if (!mounted) return;
 
@@ -130,6 +137,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           _nextCursor = null;
           _postsError = null;
           _isLoadingPosts = false;
+          _isLoadingMore = false;
         });
       }
     } catch (error) {
@@ -266,6 +274,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         await _repository.followUser(userId: widget.userId, token: token);
       }
 
+      // Fetch relationship and statistics again from the server.
       await _loadProfile();
     } catch (error) {
       if (!mounted) return;
@@ -307,12 +316,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
 
     return result == true;
-  }
-
-  int _readCount(dynamic value) {
-    if (value is num) return value.toInt();
-    if (value is String) return int.tryParse(value) ?? 0;
-    return 0;
   }
 
   void _openAuthorProfile(Post post) {
@@ -391,40 +394,16 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 
   Widget _buildStats() {
-    final theme = Theme.of(context);
+    final statsData = _profile?['stats'];
+    final stats = statsData is Map
+        ? Map<String, dynamic>.from(statsData)
+        : _profile ?? <String, dynamic>{};
 
-    final stats = [
-      ('پست‌ها', _readCount(_profile?['posts_count'])),
-      ('دنبال‌کننده', _readCount(_profile?['followers_count'])),
-      ('دنبال‌شونده', _readCount(_profile?['following_count'])),
-      ('عزیزان آسمانی', _readCount(_profile?['memorial_profiles_count'])),
-    ];
-
-    return Row(
-      children: [
-        for (final stat in stats)
-          Expanded(
-            child: Column(
-              children: [
-                Text(
-                  stat.$2.toString(),
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  stat.$1,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
+    return ProfileStats(
+      postsCount: _readCount(stats['posts_count']),
+      followersCount: _readCount(stats['followers_count']),
+      followingCount: _readCount(stats['following_count']),
+      memorialProfilesCount: _readCount(stats['memorial_profiles_count']),
     );
   }
 
