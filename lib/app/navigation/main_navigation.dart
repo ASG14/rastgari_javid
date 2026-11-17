@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import 'widgets/app_bottom_navigation.dart';
@@ -64,8 +63,7 @@ class _MainNavigationState extends State<MainNavigation> {
     _isLoadingUnreadCount = true;
 
     try {
-      final count =
-          await _notificationRepository.getUnreadCount();
+      final count = await _notificationRepository.getUnreadCount();
 
       if (!mounted) return;
 
@@ -82,9 +80,8 @@ class _MainNavigationState extends State<MainNavigation> {
   Future<void> _openNotifications() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => NotificationsScreen(
-          repository: _notificationRepository,
-        ),
+        builder: (_) =>
+            NotificationsScreen(repository: _notificationRepository),
       ),
     );
 
@@ -131,9 +128,7 @@ class _MainNavigationState extends State<MainNavigation> {
 
       Navigator.of(context).pushAndRemoveUntil<void>(
         MaterialPageRoute<void>(
-          builder: (_) => LoginScreen(
-            authRepository: widget.authRepository,
-          ),
+          builder: (_) => LoginScreen(authRepository: widget.authRepository),
         ),
         (route) => false,
       );
@@ -142,9 +137,7 @@ class _MainNavigationState extends State<MainNavigation> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'خروج از حساب با خطا مواجه شد: $error',
-          ),
+          content: Text('خروج از حساب با خطا مواجه شد: $error'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -178,30 +171,18 @@ class _MainNavigationState extends State<MainNavigation> {
       icon: Stack(
         clipBehavior: Clip.none,
         children: [
-          const Icon(
-            Icons.notifications_none_rounded,
-            size: 27,
-          ),
+          const Icon(Icons.notifications_none_rounded, size: 27),
           if (_unreadNotificationCount > 0)
             Positioned(
               top: -5,
               right: -7,
               child: Container(
-                constraints: const BoxConstraints(
-                  minWidth: 17,
-                  minHeight: 17,
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 4,
-                  vertical: 1,
-                ),
+                constraints: const BoxConstraints(minWidth: 17, minHeight: 17),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                 decoration: BoxDecoration(
                   color: colors.error,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: colors.surface,
-                    width: 1.5,
-                  ),
+                  border: Border.all(color: colors.surface, width: 1.5),
                 ),
                 alignment: Alignment.center,
                 child: Text(
@@ -245,12 +226,7 @@ class _MainNavigationState extends State<MainNavigation> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(
-                20,
-                28,
-                20,
-                20,
-              ),
+              padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -298,21 +274,12 @@ class _MainNavigationState extends State<MainNavigation> {
                   ? const SizedBox(
                       width: 22,
                       height: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                      ),
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : Icon(
-                      Icons.logout_rounded,
-                      color: colors.error,
-                    ),
+                  : Icon(Icons.logout_rounded, color: colors.error),
               title: Text(
-                _isLoggingOut
-                    ? 'در حال خروج...'
-                    : 'خروج از حساب',
-                style: TextStyle(
-                  color: colors.error,
-                ),
+                _isLoggingOut ? 'در حال خروج...' : 'خروج از حساب',
+                style: TextStyle(color: colors.error),
               ),
               onTap: _isLoggingOut
                   ? null
@@ -352,23 +319,16 @@ class _MainNavigationState extends State<MainNavigation> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        drawer: _currentIndex == 4
-            ? _buildProfileDrawer()
-            : null,
+        drawer: _currentIndex == 4 ? _buildProfileDrawer() : null,
         appBar: AppBar(
           title: Text(_titles[_currentIndex]),
           actions: [
-            if (_currentIndex == 0)
-              _buildNotificationButton(),
-            if (_currentIndex == 4)
-              _buildProfileMenuButton(),
+            if (_currentIndex == 0) _buildNotificationButton(),
+            if (_currentIndex == 4) _buildProfileMenuButton(),
             const SizedBox(width: 4),
           ],
         ),
-        body: IndexedStack(
-          index: _currentIndex,
-          children: pages,
-        ),
+        body: IndexedStack(index: _currentIndex, children: pages),
         bottomNavigationBar: AppBottomNavigation(
           currentIndex: _currentIndex,
           onDestinationSelected: (index) {

@@ -71,27 +71,25 @@ class _RastgariJavidAppState extends State<RastgariJavidApp> {
 
   @override
   Widget build(BuildContext context) {
-    
-return MaterialApp(
-  title: 'رستگاری جاوید',
-  debugShowCheckedModeBanner: false,
-  themeMode: ThemeMode.light,
-  theme: ThemeData(
-    brightness: Brightness.light,
-    colorScheme: ColorScheme.fromSeed(
-      seedColor: Colors.blue,
-      brightness: Brightness.light,
-    ),
-    useMaterial3: true,
-    scaffoldBackgroundColor: const Color(0xFFF8FAFC),
-    inputDecorationTheme: const InputDecorationTheme(
-      alignLabelWithHint: true,
-    ),
-  ),
-  home: _buildHome(),
-);
-
-   }
+    return MaterialApp(
+      title: 'رستگاری جاوید',
+      debugShowCheckedModeBanner: false,
+      themeMode: ThemeMode.light,
+      theme: ThemeData(
+        brightness: Brightness.light,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blue,
+          brightness: Brightness.light,
+        ),
+        useMaterial3: true,
+        scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+        inputDecorationTheme: const InputDecorationTheme(
+          alignLabelWithHint: true,
+        ),
+      ),
+      home: _buildHome(),
+    );
+  }
 
   Widget _buildHome() {
     if (_isCheckingSession) {

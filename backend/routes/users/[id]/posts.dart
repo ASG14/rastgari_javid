@@ -1,17 +1,13 @@
-
 import 'dart:developer' as developer;
 
 import 'package:backend/src/features/auth/application/auth_service.dart';
 import 'package:backend/src/features/auth/data/auth_repository.dart';
-import 'package:backend/src/features/posts/application/user_profile_post_service.dart';
-import 'package:backend/src/features/posts/data/user_profile_post_repository.dart';
+import 'package:backend/src/features/posts/application/post_service.dart';
+import 'package:backend/src/features/posts/data/post_repository.dart';
 import 'package:dart_frog/dart_frog.dart';
 
 final _authService = AuthService(AuthRepository());
-
-final _postService = UserProfilePostService(
-  UserProfilePostRepository(),
-);
+final _postService = PostService(PostRepository());
 
 Future<Response> onRequest(
   RequestContext context,
@@ -33,8 +29,7 @@ Future<Response> onRequest(
     );
   }
 
-  final authorization =
-      context.request.headers['authorization'];
+  final authorization = context.request.headers['authorization'];
 
   if (authorization == null || authorization.isEmpty) {
     return Response.json(
@@ -70,13 +65,9 @@ Future<Response> onRequest(
       );
     }
 
-    final queryParameters =
-        context.request.uri.queryParameters;
-
+    final queryParameters = context.request.uri.queryParameters;
     final limitValue = queryParameters['limit'];
-    final limit = limitValue == null
-        ? 20
-        : int.tryParse(limitValue);
+    final limit = limitValue == null ? 20 : int.tryParse(limitValue);
 
     if (limit == null || limit < 1 || limit > 50) {
       return Response.json(
@@ -105,7 +96,7 @@ Future<Response> onRequest(
       statusCode: error.statusCode,
       body: {'error': error.message},
     );
-  } on UserProfilePostException catch (error) {
+  } on PostException catch (error) {
     return Response.json(
       statusCode: 400,
       body: {'error': error.message},

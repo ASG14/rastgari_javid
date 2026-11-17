@@ -1,4 +1,3 @@
-
 import '../../../core/network/api_client.dart';
 import '../models/post.dart';
 
@@ -14,16 +13,9 @@ class PostsRepository {
     int limit = 20,
     String? cursor,
   }) async {
-    final path = _buildPaginatedPath(
-      '/posts',
-      limit: limit,
-      cursor: cursor,
-    );
+    final path = _buildPaginatedPath('/posts', limit: limit, cursor: cursor);
 
-    final response = await _apiClient.get(
-      path,
-      token: token,
-    );
+    final response = await _apiClient.get(path, token: token);
 
     return _parsePostPage(response);
   }
@@ -50,10 +42,7 @@ class PostsRepository {
       cursor: cursor,
     );
 
-    final response = await _apiClient.get(
-      path,
-      token: token,
-    );
+    final response = await _apiClient.get(path, token: token);
 
     return _parsePostPage(response);
   }
@@ -69,9 +58,7 @@ class PostsRepository {
     String? cursor,
   }) async {
     if (userId < 1) {
-      throw const ApiException(
-        'شناسه کاربر معتبر نیست.',
-      );
+      throw const ApiException('شناسه کاربر معتبر نیست.');
     }
 
     if (token.isEmpty) {
@@ -87,10 +74,7 @@ class PostsRepository {
       cursor: cursor,
     );
 
-    final response = await _apiClient.get(
-      path,
-      token: token,
-    );
+    final response = await _apiClient.get(path, token: token);
 
     return _parsePostPage(response);
   }
@@ -101,9 +85,7 @@ class PostsRepository {
     String? cursor,
   }) {
     if (limit < 1 || limit > 50) {
-      throw const ApiException(
-        'تعداد پست‌ها باید بین ۱ تا ۵۰ باشد.',
-      );
+      throw const ApiException('تعداد پست‌ها باید بین ۱ تا ۵۰ باشد.');
     }
 
     final normalizedCursor = cursor?.trim();
@@ -112,8 +94,7 @@ class PostsRepository {
       path: endpoint,
       queryParameters: {
         'limit': limit.toString(),
-        if (normalizedCursor != null &&
-            normalizedCursor.isNotEmpty)
+        if (normalizedCursor != null && normalizedCursor.isNotEmpty)
           'cursor': normalizedCursor,
       },
     );
@@ -121,9 +102,7 @@ class PostsRepository {
     return uri.toString();
   }
 
-  PostFeedPage _parsePostPage(
-    Map<String, dynamic> response,
-  ) {
+  PostFeedPage _parsePostPage(Map<String, dynamic> response) {
     final data = response['data'];
     final pagination = response['pagination'];
 
@@ -139,26 +118,20 @@ class PostsRepository {
       );
     }
 
-    final paginationData =
-        Map<String, dynamic>.from(pagination);
+    final paginationData = Map<String, dynamic>.from(pagination);
 
     final hasMore = paginationData['has_more'];
     final nextCursor = paginationData['next_cursor'];
 
     if (hasMore is! bool) {
-      throw const FormatException(
-        'وضعیت صفحه بعد در پاسخ سرور معتبر نیست.',
-      );
+      throw const FormatException('وضعیت صفحه بعد در پاسخ سرور معتبر نیست.');
     }
 
     if (nextCursor != null && nextCursor is! String) {
-      throw const FormatException(
-        'نشانگر صفحه بعد در پاسخ سرور معتبر نیست.',
-      );
+      throw const FormatException('نشانگر صفحه بعد در پاسخ سرور معتبر نیست.');
     }
 
-    if (hasMore &&
-        (nextCursor == null || nextCursor.isEmpty)) {
+    if (hasMore && (nextCursor == null || nextCursor.isEmpty)) {
       throw const FormatException(
         'سرور وجود صفحه بعد را اعلام کرده اما نشانگر آن معتبر نیست.',
       );
@@ -166,14 +139,10 @@ class PostsRepository {
 
     final posts = data.map((item) {
       if (item is! Map) {
-        throw const FormatException(
-          'اطلاعات یکی از پست‌ها معتبر نیست.',
-        );
+        throw const FormatException('اطلاعات یکی از پست‌ها معتبر نیست.');
       }
 
-      return Post.fromJson(
-        Map<String, dynamic>.from(item),
-      );
+      return Post.fromJson(Map<String, dynamic>.from(item));
     }).toList();
 
     return PostFeedPage(
@@ -191,9 +160,7 @@ class PostsRepository {
     final normalizedContent = content.trim();
 
     if (normalizedContent.isEmpty) {
-      throw const ApiException(
-        'متن پست الزامی است.',
-      );
+      throw const ApiException('متن پست الزامی است.');
     }
 
     if (normalizedContent.length > 10000) {
@@ -205,22 +172,16 @@ class PostsRepository {
     final response = await _apiClient.post(
       '/posts',
       token: token,
-      body: {
-        'content': normalizedContent,
-      },
+      body: {'content': normalizedContent},
     );
 
     final data = response['data'];
 
     if (data is! Map) {
-      throw const ApiException(
-        'ساختار پاسخ انتشار پست از سرور معتبر نیست.',
-      );
+      throw const ApiException('ساختار پاسخ انتشار پست از سرور معتبر نیست.');
     }
 
-    return Post.fromJson(
-      Map<String, dynamic>.from(data),
-    );
+    return Post.fromJson(Map<String, dynamic>.from(data));
   }
 
   /// ثبت یا حذف همدلی با یک پست.
@@ -229,25 +190,16 @@ class PostsRepository {
     required bool isLiked,
     required String token,
   }) async {
-    final path =
-        '/posts/${Uri.encodeComponent(postId)}/like';
+    final path = '/posts/${Uri.encodeComponent(postId)}/like';
 
     final response = isLiked
-        ? await _apiClient.post(
-            path,
-            token: token,
-          )
-        : await _apiClient.delete(
-            path,
-            token: token,
-          );
+        ? await _apiClient.post(path, token: token)
+        : await _apiClient.delete(path, token: token);
 
     final data = response['data'];
 
     if (data is! Map) {
-      throw const ApiException(
-        'ساختار پاسخ تغییر وضعیت همدلی معتبر نیست.',
-      );
+      throw const ApiException('ساختار پاسخ تغییر وضعیت همدلی معتبر نیست.');
     }
 
     return Map<String, dynamic>.from(data);

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../auth/data/auth_repository.dart';
+import '../../../posts/data/posts_repository.dart';
+import '../../../posts/models/post.dart';
+import '../../../posts/presentation/widgets/post_card.dart';
 import '../../data/user_profile_repository.dart';
 
 class UserProfileScreen extends StatefulWidget {
@@ -21,14 +24,24 @@ class UserProfileScreen extends StatefulWidget {
 
 class _UserProfileScreenState extends State<UserProfileScreen> {
   final UserProfileRepository _repository = UserProfileRepository();
+  final PostsRepository _postsRepository = PostsRepository();
+
+  static const int _pageSize = 20;
 
   Map<String, dynamic>? _profile;
   Map<String, dynamic>? _relationship;
 
+  List<Post> _posts = [];
+
   bool _isLoading = true;
+  bool _isLoadingPosts = false;
+  bool _isLoadingMore = false;
   bool _isUpdatingRelationship = false;
+  bool _hasMore = false;
 
   String? _error;
+  String? _postsError;
+  String? _nextCursor;
 
   bool get _isOwnProfile => widget.userId == widget.currentUserId;
 
@@ -103,6 +116,17 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         _relationship = Map<String, dynamic>.from(relationshipData);
         _isLoading = false;
       });
+
+      if (profile['can_view_posts'] == true) {
+        await _loadPosts();
+      } else {
+        setState(() {
+          _posts = [];
+          _hasMore = false;
+          _nextCursor = null;
+          _postsError = null;
+        });
+      }
     } catch (error) {
       if (!mounted) return;
 
@@ -113,14 +137,123 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     }
   }
 
+  Future<void> _loadPosts() async {
+    if (!mounted || _isLoadingPosts) return;
+
+    setState(() {
+      _isLoadingPosts = true;
+      _postsError = null;
+      _nextCursor = null;
+    });
+
+    try {
+      final token = await _readToken();
+
+      final page = await _postsRepository.getUserPosts(
+        userId: widget.userId,
+        token: token,
+        limit: _pageSize,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _posts = page.posts;
+        _hasMore = page.hasMore;
+        _nextCursor = page.nextCursor;
+        _isLoadingPosts = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _postsError = error.toString();
+        _isLoadingPosts = false;
+      });
+    }
+  }
+
+  Future<void> _loadMorePosts() async {
+    if (!mounted || _isLoadingMore || !_hasMore || _nextCursor == null) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingMore = true;
+      _postsError = null;
+    });
+
+    try {
+      final token = await _readToken();
+
+      final page = await _postsRepository.getUserPosts(
+        userId: widget.userId,
+        token: token,
+        limit: _pageSize,
+        cursor: _nextCursor,
+      );
+
+      if (!mounted) return;
+
+      final existingIds = _posts.map((post) => post.id).toSet();
+      final newPosts = page.posts.where((post) => existingIds.add(post.id));
+
+      setState(() {
+        _posts = [..._posts, ...newPosts];
+        _hasMore = page.hasMore;
+        _nextCursor = page.nextCursor;
+        _isLoadingMore = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _postsError = error.toString();
+        _isLoadingMore = false;
+      });
+    }
+  }
+
+  Future<void> _handleLikeChanged(Post post, bool isLiked) async {
+    final token = await _readToken();
+
+    final result = await _postsRepository.setPostLike(
+      postId: post.id,
+      isLiked: isLiked,
+      token: token,
+    );
+
+    final serverIsLiked = result['is_liked'];
+    final serverLikeCount = result['likes_count'];
+
+    if (serverIsLiked is! bool || serverLikeCount is! num) {
+      throw const FormatException(
+        'پاسخ سرور برای به‌روزرسانی همدلی معتبر نیست.',
+      );
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _posts = _posts.map((item) {
+        if (item.id != post.id) return item;
+
+        return item.copyWith(
+          isLiked: serverIsLiked,
+          likeCount: serverLikeCount.toInt(),
+        );
+      }).toList();
+    });
+  }
+
   Future<void> _handleRelationshipAction() async {
     if (_isUpdatingRelationship || _isOwnProfile) return;
-
-    final token = await _readToken();
 
     setState(() => _isUpdatingRelationship = true);
 
     try {
+      final token = await _readToken();
+
       if (_hasPendingRequest) {
         final requestId = await _repository.findOutgoingRequestId(
           targetUserId: widget.userId,
@@ -242,6 +375,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
   Widget _buildStats() {
     final theme = Theme.of(context);
+
     final stats = [
       ('پست‌ها', _readCount(_profile?['posts_count'])),
       ('دنبال‌کننده', _readCount(_profile?['followers_count'])),
@@ -281,69 +415,169 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.lock_outline_rounded,
-              size: 52,
+    return Padding(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.lock_outline_rounded,
+            size: 52,
+            color: colors.onSurfaceVariant,
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'این حساب خصوصی است',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'برای مشاهده نوشته‌ها و محتوای اختصاصی این کاربر، درخواست دوستی ارسال کنید.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
               color: colors.onSurfaceVariant,
+              height: 1.8,
             ),
-            const SizedBox(height: 14),
-            Text(
-              'این حساب خصوصی است',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'برای مشاهده نوشته‌ها و محتوای اختصاصی این کاربر، درخواست دوستی ارسال کنید.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colors.onSurfaceVariant,
-                height: 1.8,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildPostsPlaceholder() {
+  Widget _buildPostsSection() {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
+    if (!_canViewPosts) {
+      return _buildLockedContent();
+    }
+
+    if (_isLoadingPosts) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 48),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_postsError != null && _posts.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 28),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.article_outlined, size: 46, color: colors.primary),
+            const Icon(Icons.cloud_off_outlined, size: 42),
+            const SizedBox(height: 10),
+            const Text('دریافت نوشته‌ها ناموفق بود.'),
             const SizedBox(height: 12),
             Text(
-              'نوشته‌های کاربر',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
+              _postsError!,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
               ),
             ),
-            const SizedBox(height: 7),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _loadPosts,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('تلاش مجدد'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_posts.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 38),
+        child: Column(
+          children: [
+            Icon(
+              Icons.article_outlined,
+              size: 44,
+              color: colors.onSurfaceVariant,
+            ),
+            const SizedBox(height: 10),
             Text(
-              'نمایش نوشته‌های این کاربر در مرحله اتصال فهرست پست‌های پروفایل فعال می‌شود.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colors.onSurfaceVariant,
-                height: 1.8,
+              'هنوز نوشته‌ای منتشر نشده است',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],
         ),
-      ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final post in _posts)
+          PostCard(
+            key: ValueKey(post.id),
+            post: post,
+            onAuthorTap: () {
+              final authorId = int.tryParse(post.author.id);
+
+              if (authorId == null ||
+                  authorId < 1 ||
+                  authorId == widget.userId) {
+                return;
+              }
+
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => UserProfileScreen(
+                    userId: authorId,
+                    currentUserId: widget.currentUserId,
+                    authRepository: widget.authRepository,
+                  ),
+                ),
+              );
+            },
+            onLikeChanged: (isLiked) {
+              return _handleLikeChanged(post, isLiked);
+            },
+          ),
+        if (_postsError != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Text(
+              'دریافت نوشته‌های بعدی ناموفق بود: $_postsError',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(color: colors.error),
+            ),
+          ),
+        if (_hasMore || _isLoadingMore)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Center(
+              child: OutlinedButton(
+                onPressed: _isLoadingMore ? null : _loadMorePosts,
+                child: _isLoadingMore
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('بارگذاری نوشته‌های بیشتر'),
+              ),
+            ),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Center(
+              child: Text(
+                'به پایان نوشته‌ها رسیدید',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -463,10 +697,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     const SizedBox(height: 24),
                     Divider(color: colors.outlineVariant),
                     const SizedBox(height: 12),
-                    if (!_canViewPosts)
-                      SizedBox(height: 300, child: _buildLockedContent())
-                    else
-                      SizedBox(height: 300, child: _buildPostsPlaceholder()),
+                    Text(
+                      'نوشته‌ها',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildPostsSection(),
                   ],
                 ),
               ),

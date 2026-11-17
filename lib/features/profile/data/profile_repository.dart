@@ -1,4 +1,3 @@
-
 import '../../../core/network/api_client.dart';
 
 class ProfileRepository {
@@ -22,19 +21,14 @@ class ProfileRepository {
       );
     }
 
-    final response = await _apiClient.get(
-      '/users/$userId',
-      token: token,
-    );
+    final response = await _apiClient.get('/users/$userId', token: token);
 
     // طبق پیاده‌سازی واقعی Backend، اطلاعات پروفایل
     // مستقیماً داخل data قرار دارد، نه data.profile.
     final data = response['data'];
 
     if (data is! Map) {
-      throw const ApiException(
-        'ساختار پاسخ اطلاعات پروفایل معتبر نیست.',
-      );
+      throw const ApiException('ساختار پاسخ اطلاعات پروفایل معتبر نیست.');
     }
 
     return Map<String, dynamic>.from(data);
@@ -58,9 +52,7 @@ class ProfileRepository {
     final data = response['data'];
 
     if (data is! List) {
-      throw const ApiException(
-        'ساختار فهرست عزیزان آسمانی معتبر نیست.',
-      );
+      throw const ApiException('ساختار فهرست عزیزان آسمانی معتبر نیست.');
     }
 
     return data.map((item) {

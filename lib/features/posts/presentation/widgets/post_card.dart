@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import '../../models/post.dart';
@@ -185,8 +184,7 @@ class _PostCardState extends State<PostCard> {
               ),
             ),
           ),
-          if (widget.post.mediaUrl != null &&
-              widget.post.mediaUrl!.isNotEmpty)
+          if (widget.post.mediaUrl != null && widget.post.mediaUrl!.isNotEmpty)
             _PostMedia(url: widget.post.mediaUrl!),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
@@ -233,8 +231,8 @@ class _PostCardState extends State<PostCard> {
                     icon: _isUpdatingLike
                         ? Icons.hourglass_top_rounded
                         : isLiked
-                            ? Icons.favorite_rounded
-                            : Icons.favorite_border_rounded,
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
                     label: _isUpdatingLike ? 'در حال ثبت...' : 'همدلی',
                     color: isLiked ? colors.error : null,
                     onTap: _isUpdatingLike ? null : _toggleLike,
