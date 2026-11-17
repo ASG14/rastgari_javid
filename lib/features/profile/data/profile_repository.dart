@@ -11,20 +11,11 @@ class ProfileRepository {
     required int userId,
     required String token,
   }) async {
-    if (userId < 1) {
-      throw const ApiException('شناسه کاربر معتبر نیست.');
-    }
-
-    if (token.isEmpty) {
-      throw const ApiException(
-        'برای دریافت اطلاعات پروفایل ابتدا وارد حساب شوید.',
-      );
-    }
+    _validateUserId(userId);
+    _validateToken(token);
 
     final response = await _apiClient.get('/users/$userId', token: token);
 
-    // طبق پیاده‌سازی واقعی Backend، اطلاعات پروفایل
-    // مستقیماً داخل data قرار دارد، نه data.profile.
     final data = response['data'];
 
     if (data is! Map) {
@@ -38,17 +29,38 @@ class ProfileRepository {
   Future<List<Map<String, dynamic>>> getMyMemorialProfiles({
     required String token,
   }) async {
-    if (token.isEmpty) {
-      throw const ApiException(
-        'برای دریافت عزیزان آسمانی ابتدا وارد حساب شوید.',
-      );
-    }
+    _validateToken(token);
 
     final response = await _apiClient.get(
       '/memorial-profiles/user',
       token: token,
     );
 
+    return _parseMemorialProfiles(response);
+  }
+
+  /// دریافت عزیزان آسمانی یک کاربر دیگر
+  ///
+  /// دسترسی به این اطلاعات توسط Backend و بر اساس
+  /// قوانین حریم خصوصی حساب مقصد کنترل می‌شود.
+  Future<List<Map<String, dynamic>>> getUserMemorialProfiles({
+    required int userId,
+    required String token,
+  }) async {
+    _validateUserId(userId);
+    _validateToken(token);
+
+    final response = await _apiClient.get(
+      '/memorial-profiles/users/$userId',
+      token: token,
+    );
+
+    return _parseMemorialProfiles(response);
+  }
+
+  List<Map<String, dynamic>> _parseMemorialProfiles(
+    Map<String, dynamic> response,
+  ) {
     final data = response['data'];
 
     if (data is! List) {
@@ -64,5 +76,17 @@ class ProfileRepository {
 
       return Map<String, dynamic>.from(item);
     }).toList();
+  }
+
+  void _validateUserId(int userId) {
+    if (userId < 1) {
+      throw const ApiException('شناسه کاربر معتبر نیست.');
+    }
+  }
+
+  void _validateToken(String token) {
+    if (token.isEmpty) {
+      throw const ApiException('برای انجام این عملیات ابتدا وارد حساب شوید.');
+    }
   }
 }
