@@ -5,6 +5,9 @@ import '../../../auth/models/auth_user.dart';
 import '../../../posts/data/posts_repository.dart';
 import '../../../posts/models/post.dart';
 import '../../../posts/presentation/widgets/post_card.dart';
+import '../../../memorial_profiles/models/memorial_profile.dart';
+import '../../../memorial_profiles/presentation/screens/memorial_profile_detail_screen.dart';
+import '../../../memorial_profiles/presentation/widgets/memorial_profile_card.dart';
 import '../../data/profile_repository.dart';
 import '../widgets/profile_stats.dart';
 import '../widgets/profile_tabs.dart';
@@ -36,7 +39,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   final ProfileRepository _profileRepository = ProfileRepository();
 
   List<Post> _posts = [];
-  List<Map<String, dynamic>> _memorialProfiles = [];
+  List<MemorialProfile> _memorialProfiles = [];
 
   int _followersCount = 0;
   int _followingCount = 0;
@@ -167,6 +170,10 @@ class _ProfileScreenState extends State<ProfileScreen>
           ? Map<String, dynamic>.from(statsData)
           : profile;
 
+      final parsedMemorialProfiles = memorialProfiles
+          .map(MemorialProfile.fromJson)
+          .toList(growable: false);
+
       if (!mounted) return;
 
       setState(() {
@@ -174,10 +181,10 @@ class _ProfileScreenState extends State<ProfileScreen>
         _followingCount = _readCount(stats['following_count']);
         _postsCount = _readCount(stats['posts_count']);
 
-        _memorialProfiles = memorialProfiles;
+        _memorialProfiles = parsedMemorialProfiles;
 
         _memorialProfilesCount = stats['memorial_profiles_count'] == null
-            ? memorialProfiles.length
+            ? parsedMemorialProfiles.length
             : _readCount(stats['memorial_profiles_count']);
 
         _isLoadingProfileData = false;
@@ -278,6 +285,22 @@ class _ProfileScreenState extends State<ProfileScreen>
         _isLoadingMorePosts = false;
       });
     }
+  }
+
+  Future<void> _openMemorialProfile(MemorialProfile profile) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => MemorialProfileDetailScreen(
+          profileId: profile.id,
+          currentUserId: widget.user.id,
+          authRepository: widget.authRepository,
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+
+    await _loadProfileData();
   }
 
   @override
@@ -479,9 +502,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Widget _buildMemorialProfilesTab(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-
     if (_isLoadingProfileData) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -515,33 +535,11 @@ class _ProfileScreenState extends State<ProfileScreen>
       itemBuilder: (context, index) {
         final profile = _memorialProfiles[index];
 
-        final name = profile['full_name']?.toString() ?? 'بدون نام';
-        final relationship = profile['relationship']?.toString();
-        final isCreator = profile['is_creator'] == true;
-
-        return Card(
-          elevation: 0,
-          color: colors.surfaceContainerLow,
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: colors.primaryContainer,
-              child: Icon(
-                Icons.favorite_rounded,
-                color: colors.onPrimaryContainer,
-              ),
-            ),
-            title: Text(
-              name,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            subtitle: Text(
-              isCreator
-                  ? 'سازنده پروفایل یادبود'
-                  : 'نسبت: ${relationship ?? 'مشخص نشده'}',
-            ),
-          ),
+        return MemorialProfileCard(
+          key: ValueKey(profile.id),
+          profile: profile,
+          viewerName: 'من',
+          onTap: () => _openMemorialProfile(profile),
         );
       },
     );
@@ -567,7 +565,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             TextButton.icon(
               onPressed: _loadMorePosts,
               icon: const Icon(Icons.refresh_rounded),
-              label: const Text('تلاش دوباره'),
+              label: const Text('تلاش مجدد'),
             ),
           ],
         ),

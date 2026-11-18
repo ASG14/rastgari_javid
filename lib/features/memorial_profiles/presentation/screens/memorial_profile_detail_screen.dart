@@ -25,8 +25,7 @@ class MemorialProfileDetailScreen extends StatefulWidget {
 
 class _MemorialProfileDetailScreenState
     extends State<MemorialProfileDetailScreen> {
-  final MemorialProfilesRepository _repository =
-      MemorialProfilesRepository();
+  final MemorialProfilesRepository _repository = MemorialProfilesRepository();
 
   MemorialProfile? _profile;
 
@@ -35,8 +34,7 @@ class _MemorialProfileDetailScreenState
 
   String? _error;
 
-  bool get _isCreator =>
-      _profile?.createdByUserId == widget.currentUserId;
+  bool get _isCreator => _profile?.createdByUserId == widget.currentUserId;
 
   bool get _isFollowing => _profile?.isFollowing == true;
 
@@ -50,9 +48,7 @@ class _MemorialProfileDetailScreenState
     final token = await widget.authRepository.readAccessToken();
 
     if (token == null || token.isEmpty) {
-      throw const ApiException(
-        'نشست کاربری معتبر نیست. دوباره وارد شوید.',
-      );
+      throw const ApiException('نشست کاربری معتبر نیست. دوباره وارد شوید.');
     }
 
     return token;
@@ -119,9 +115,7 @@ class _MemorialProfileDetailScreenState
       await _loadProfile();
 
       if (mounted) {
-        _showMessage(
-          'این عزیز آسمانی به فهرست شما اضافه شد.',
-        );
+        _showMessage('این عزیز آسمانی به فهرست شما اضافه شد.');
       }
     } catch (error) {
       if (mounted) {
@@ -203,9 +197,7 @@ class _MemorialProfileDetailScreenState
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: const Text(
-                'نسبت شما با این عزیز چیست؟',
-              ),
+              title: const Text('نسبت شما با این عزیز چیست؟'),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: relationships.entries.map((entry) {
@@ -263,10 +255,7 @@ class _MemorialProfileDetailScreenState
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          behavior: SnackBarBehavior.floating,
-        ),
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
   }
 
@@ -283,28 +272,21 @@ class _MemorialProfileDetailScreenState
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            icon,
-            size: 20,
-            color: colors.primary,
-          ),
+          Icon(icon, size: 20, color: colors.primary),
           const SizedBox(width: 12),
           SizedBox(
             width: 92,
             child: Text(
               title,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: colors.onSurfaceVariant,
-              ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: colors.onSurfaceVariant),
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-                height: 1.7,
-              ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(fontWeight: FontWeight.w600, height: 1.7),
             ),
           ),
         ],
@@ -418,9 +400,7 @@ class _MemorialProfileDetailScreenState
               ),
               child: Text(
                 profile.memorialText!,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  height: 2,
-                ),
+                style: theme.textTheme.bodyMedium?.copyWith(height: 2),
               ),
             ),
           ],
@@ -437,9 +417,7 @@ class _MemorialProfileDetailScreenState
                           ? const SizedBox(
                               width: 18,
                               height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                              ),
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.favorite_rounded),
                       label: const Text('حذف از عزیزان من'),
@@ -452,13 +430,9 @@ class _MemorialProfileDetailScreenState
                           ? const SizedBox(
                               width: 18,
                               height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                              ),
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Icon(
-                              Icons.favorite_border_rounded,
-                            ),
+                          : const Icon(Icons.favorite_border_rounded),
                       label: const Text('افزودن به عزیزان من'),
                     ),
             ),
@@ -483,46 +457,32 @@ class _MemorialProfileDetailScreenState
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('عزیز آسمانی'),
-        ),
+        appBar: AppBar(title: const Text('عزیز آسمانی')),
         body: _isLoading
-            ? const Center(
-                child: CircularProgressIndicator(),
-              )
+            ? const Center(child: CircularProgressIndicator())
             : _error != null
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.cloud_off_outlined,
-                            size: 44,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            _error!,
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 16),
-                          FilledButton.icon(
-                            onPressed: _loadProfile,
-                            icon: const Icon(
-                              Icons.refresh_rounded,
-                            ),
-                            label: const Text('تلاش دوباره'),
-                          ),
-                        ],
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.cloud_off_outlined, size: 44),
+                      const SizedBox(height: 12),
+                      Text(_error!, textAlign: TextAlign.center),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: _loadProfile,
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('تلاش دوباره'),
                       ),
-                    ),
-                  )
-                : _profile == null
-                    ? const Center(
-                        child: Text('پروفایل پیدا نشد.'),
-                      )
-                    : _buildContent(_profile!),
+                    ],
+                  ),
+                ),
+              )
+            : _profile == null
+            ? const Center(child: Text('پروفایل پیدا نشد.'))
+            : _buildContent(_profile!),
       ),
     );
   }

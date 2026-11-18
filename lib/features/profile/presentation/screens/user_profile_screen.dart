@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../auth/data/auth_repository.dart';
+import '../../../memorial_profiles/models/memorial_profile.dart';
+import '../../../memorial_profiles/presentation/screens/memorial_profile_detail_screen.dart';
+import '../../../memorial_profiles/presentation/widgets/memorial_profile_card.dart';
 import '../../../posts/data/posts_repository.dart';
 import '../../../posts/models/post.dart';
 import '../../../posts/presentation/widgets/post_card.dart';
@@ -33,13 +36,13 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
   static const int _pageSize = 20;
 
-  late final TabController _tabController;
+  late TabController _tabController;
 
   Map<String, dynamic>? _profile;
   Map<String, dynamic>? _relationship;
 
   List<Post> _posts = [];
-  List<Map<String, dynamic>> _memorialProfiles = [];
+  List<MemorialProfile> _memorialProfiles = [];
 
   bool _isLoading = true;
   bool _isLoadingPosts = false;
@@ -66,11 +69,16 @@ class _UserProfileScreenState extends State<UserProfileScreen>
 
   bool get _canViewPosts => _profile?['can_view_posts'] == true;
 
+  String get _profileDisplayName =>
+      _profile?['display_name']?.toString().trim().isNotEmpty == true
+      ? _profile!['display_name'].toString().trim()
+      : 'کاربر';
+
   @override
   void initState() {
     super.initState();
 
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
     _loadProfile();
   }
 
@@ -78,6 +86,21 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _configureTabController(int length) {
+    if (_tabController.length == length) return;
+
+    final currentIndex = _tabController.index;
+    final nextIndex = currentIndex.clamp(0, length - 1);
+
+    _tabController.dispose();
+
+    _tabController = TabController(
+      length: length,
+      vsync: this,
+      initialIndex: nextIndex,
+    );
   }
 
   Future<String> _readToken() async {
@@ -135,7 +158,11 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         );
       }
 
+      final canViewContent = profile['can_view_posts'] == true;
+
       if (!mounted) return;
+
+      _configureTabController(canViewContent ? 3 : 2);
 
       setState(() {
         _profile = profile;
@@ -143,7 +170,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         _isLoading = false;
       });
 
-      if (profile['can_view_posts'] == true) {
+      if (canViewContent) {
         await Future.wait([_loadPosts(), _loadMemorialProfiles()]);
       } else {
         ++_postsRequestGeneration;
@@ -171,7 +198,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _loadPosts() async {
-    if (!mounted || _isLoadingPosts) return;
+    if (!mounted || _isLoadingPosts || !_canViewPosts) return;
 
     final generation = ++_postsRequestGeneration;
 
@@ -209,7 +236,9 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Future<void> _loadMemorialProfiles() async {
-    if (!mounted || _isLoadingMemorialProfiles) return;
+    if (!mounted || _isLoadingMemorialProfiles || !_canViewPosts) {
+      return;
+    }
 
     setState(() {
       _isLoadingMemorialProfiles = true;
@@ -224,10 +253,14 @@ class _UserProfileScreenState extends State<UserProfileScreen>
         token: token,
       );
 
+      final parsedProfiles = profiles
+          .map(MemorialProfile.fromJson)
+          .toList(growable: false);
+
       if (!mounted) return;
 
       setState(() {
-        _memorialProfiles = profiles;
+        _memorialProfiles = parsedProfiles;
         _isLoadingMemorialProfiles = false;
       });
     } catch (error) {
@@ -240,12 +273,29 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     }
   }
 
+  Future<void> _openMemorialProfile(MemorialProfile profile) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => MemorialProfileDetailScreen(
+          profileId: profile.id,
+          currentUserId: widget.currentUserId,
+          authRepository: widget.authRepository,
+        ),
+      ),
+    );
+
+    if (!mounted || !_canViewPosts) return;
+
+    await _loadMemorialProfiles();
+  }
+
   Future<void> _loadMorePosts() async {
     if (!mounted ||
         _isLoadingMore ||
         _isLoadingPosts ||
         !_hasMore ||
-        _nextCursor == null) {
+        _nextCursor == null ||
+        !_canViewPosts) {
       return;
     }
 
@@ -615,7 +665,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     final colors = theme.colorScheme;
 
     if (!_canViewPosts) {
-      return _buildLockedContent();
+      return const SizedBox.shrink();
     }
 
     if (_isLoadingMemorialProfiles) {
@@ -648,7 +698,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
             OutlinedButton.icon(
               onPressed: _loadMemorialProfiles,
               icon: const Icon(Icons.refresh_rounded),
-              label: const Text('تلاش دوباره'),
+              label: const Text('تلاش مجدد'),
             ),
           ],
         ),
@@ -685,31 +735,11 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       itemBuilder: (context, index) {
         final memorial = _memorialProfiles[index];
 
-        final name = memorial['full_name']?.toString() ?? 'بدون نام';
-        final relationship = memorial['relationship']?.toString();
-        final isCreator = memorial['is_creator'] == true;
-
-        return Card(
-          elevation: 0,
-          color: colors.surfaceContainerLow,
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: colors.primaryContainer,
-              foregroundColor: colors.onPrimaryContainer,
-              child: const Icon(Icons.favorite_rounded),
-            ),
-            title: Text(
-              name,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            subtitle: Text(
-              isCreator
-                  ? 'سازنده پروفایل یادبود'
-                  : 'نسبت: ${relationship ?? 'مشخص نشده'}',
-            ),
-          ),
+        return MemorialProfileCard(
+          key: ValueKey(memorial.id),
+          profile: memorial,
+          viewerName: _profileDisplayName,
+          onTap: () => _openMemorialProfile(memorial),
         );
       },
     );
@@ -719,7 +749,6 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
 
-    final displayName = _profile?['display_name']?.toString() ?? 'کاربر';
     final username = _profile?['username']?.toString() ?? '';
     final bio = _profile?['bio']?.toString().trim() ?? '';
 
@@ -740,7 +769,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    displayName,
+                    _profileDisplayName,
                     style: theme.textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
@@ -797,6 +826,30 @@ class _UserProfileScreenState extends State<UserProfileScreen>
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
 
+    final tabs = <Widget>[
+      const Tab(text: 'نوشته‌ها'),
+      if (_canViewPosts) const Tab(text: 'عزیزان آسمانی'),
+      const Tab(text: 'رویدادها'),
+    ];
+
+    final children = <Widget>[
+      _buildPostsSection(),
+      if (_canViewPosts) _buildMemorialProfilesSection(),
+      Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            'رویدادهای این کاربر در این بخش نمایش داده می‌شوند.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colors.onSurfaceVariant,
+              height: 1.8,
+            ),
+          ),
+        ),
+      ),
+    ];
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
@@ -843,28 +896,8 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                     ProfileTabs(
                       controller: _tabController,
                       height: 560,
-                      tabs: const [
-                        Tab(text: 'نوشته‌ها'),
-                        Tab(text: 'عزیزان آسمانی'),
-                        Tab(text: 'رویدادها'),
-                      ],
-                      children: [
-                        _buildPostsSection(),
-                        _buildMemorialProfilesSection(),
-                        Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Text(
-                              'رویدادهای این کاربر در این بخش نمایش داده می‌شوند.',
-                              textAlign: TextAlign.center,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: colors.onSurfaceVariant,
-                                height: 1.8,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                      tabs: tabs,
+                      children: children,
                     ),
                   ],
                 ),

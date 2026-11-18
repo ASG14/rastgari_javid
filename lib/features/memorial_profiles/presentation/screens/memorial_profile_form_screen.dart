@@ -21,8 +21,7 @@ class MemorialProfileFormScreen extends StatefulWidget {
       _MemorialProfileFormScreenState();
 }
 
-class _MemorialProfileFormScreenState
-    extends State<MemorialProfileFormScreen> {
+class _MemorialProfileFormScreenState extends State<MemorialProfileFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _repository = MemorialProfilesRepository();
 
@@ -55,9 +54,7 @@ class _MemorialProfileFormScreenState
 
     final profile = widget.profile;
 
-    _nameController = TextEditingController(
-      text: profile?.fullName ?? '',
-    );
+    _nameController = TextEditingController(text: profile?.fullName ?? '');
 
     _memorialTextController = TextEditingController(
       text: profile?.memorialText ?? '',
@@ -69,13 +66,9 @@ class _MemorialProfileFormScreenState
 
     _relationship = profile?.relationship;
 
-    _birthDate = JalaliDate.normalizeStoredDate(
-      profile?.birthDate,
-    );
+    _birthDate = JalaliDate.normalizeStoredDate(profile?.birthDate);
 
-    _deathDate = JalaliDate.normalizeStoredDate(
-      profile?.deathDate,
-    );
+    _deathDate = JalaliDate.normalizeStoredDate(profile?.deathDate);
   }
 
   @override
@@ -129,10 +122,9 @@ class _MemorialProfileFormScreenState
             }
 
             final maximumDay =
-                selectedYear == now.year &&
-                        selectedMonth == now.month
-                    ? now.day
-                    : monthLength;
+                selectedYear == now.year && selectedMonth == now.month
+                ? now.day
+                : monthLength;
 
             if (selectedDay > maximumDay) {
               selectedDay = maximumDay;
@@ -183,8 +175,7 @@ class _MemorialProfileFormScreenState
                                 setDialogState(() {
                                   selectedYear = value;
 
-                                  final newMonthLength =
-                                      JalaliDate.daysInMonth(
+                                  final newMonthLength = JalaliDate.daysInMonth(
                                     selectedYear,
                                     selectedMonth,
                                   );
@@ -230,8 +221,7 @@ class _MemorialProfileFormScreenState
                                 setDialogState(() {
                                   selectedMonth = value;
 
-                                  final newLength =
-                                      JalaliDate.daysInMonth(
+                                  final newLength = JalaliDate.daysInMonth(
                                     selectedYear,
                                     selectedMonth,
                                   );
@@ -242,9 +232,9 @@ class _MemorialProfileFormScreenState
 
                                   final newMaximumDay =
                                       selectedYear == now.year &&
-                                              selectedMonth == now.month
-                                          ? now.day
-                                          : newLength;
+                                          selectedMonth == now.month
+                                      ? now.day
+                                      : newLength;
 
                                   if (selectedDay > newMaximumDay) {
                                     selectedDay = newMaximumDay;
@@ -264,11 +254,7 @@ class _MemorialProfileFormScreenState
                                 border: OutlineInputBorder(),
                               ),
                               items: [
-                                for (
-                                  int day = 1;
-                                  day <= maximumDay;
-                                  day++
-                                )
+                                for (int day = 1; day <= maximumDay; day++)
                                   DropdownMenuItem(
                                     value: day,
                                     child: Text(
@@ -305,9 +291,7 @@ class _MemorialProfileFormScreenState
                           '${JalaliDate.toPersianDigits(selectedYear.toString())}',
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
+                              ?.copyWith(fontWeight: FontWeight.w800),
                         ),
                       ),
                     ],
@@ -341,9 +325,7 @@ class _MemorialProfileFormScreenState
     );
   }
 
-  Future<void> _selectDate({
-    required bool isBirthDate,
-  }) async {
+  Future<void> _selectDate({required bool isBirthDate}) async {
     final currentValue = isBirthDate ? _birthDate : _deathDate;
 
     final selected = await _selectJalaliDate(
@@ -439,9 +421,7 @@ class _MemorialProfileFormScreenState
       final token = await widget.authRepository.readAccessToken();
 
       if (token == null || token.isEmpty) {
-        throw Exception(
-          'نشست کاربری معتبر نیست. دوباره وارد شوید.',
-        );
+        throw Exception('نشست کاربری معتبر نیست. دوباره وارد شوید.');
       }
 
       final fullName = _nameController.text.trim();
@@ -488,10 +468,7 @@ class _MemorialProfileFormScreenState
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          behavior: SnackBarBehavior.floating,
-        ),
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
   }
 
@@ -541,9 +518,8 @@ class _MemorialProfileFormScreenState
       children: [
         Text(
           title,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 7),
         InkWell(
@@ -551,10 +527,7 @@ class _MemorialProfileFormScreenState
           borderRadius: BorderRadius.circular(14),
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 15,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
             decoration: BoxDecoration(
               border: Border.all(color: colors.outlineVariant),
               borderRadius: BorderRadius.circular(14),
@@ -569,9 +542,7 @@ class _MemorialProfileFormScreenState
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    hasValue
-                        ? JalaliDate.display(value)
-                        : 'انتخاب تاریخ شمسی',
+                    hasValue ? JalaliDate.display(value) : 'انتخاب تاریخ شمسی',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: hasValue
                           ? colors.onSurface
@@ -584,10 +555,7 @@ class _MemorialProfileFormScreenState
                     tooltip: 'پاک کردن تاریخ',
                     onPressed: _isSaving ? null : onClear,
                     visualDensity: VisualDensity.compact,
-                    icon: const Icon(
-                      Icons.close_rounded,
-                      size: 19,
-                    ),
+                    icon: const Icon(Icons.close_rounded, size: 19),
                   ),
               ],
             ),
@@ -596,9 +564,8 @@ class _MemorialProfileFormScreenState
         const SizedBox(height: 5),
         Text(
           description,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: colors.onSurfaceVariant,
-          ),
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: colors.onSurfaceVariant),
         ),
       ],
     );
@@ -613,11 +580,7 @@ class _MemorialProfileFormScreenState
       textDirection: TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(
-            _isEditing
-                ? 'ویرایش پروفایل یادبود'
-                : 'ثبت عزیز آسمانی',
-          ),
+          title: Text(_isEditing ? 'ویرایش پروفایل یادبود' : 'ثبت عزیز آسمانی'),
         ),
         body: SafeArea(
           child: Form(
@@ -628,9 +591,7 @@ class _MemorialProfileFormScreenState
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: colors.primaryContainer.withValues(
-                      alpha: 0.45,
-                    ),
+                    color: colors.primaryContainer.withValues(alpha: 0.45),
                     borderRadius: BorderRadius.circular(18),
                   ),
                   child: Row(
@@ -792,21 +753,17 @@ class _MemorialProfileFormScreenState
                         ? const SizedBox(
                             width: 19,
                             height: 19,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                            ),
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.check_rounded),
                     label: Text(
                       _isSaving
                           ? 'در حال ذخیره اطلاعات...'
                           : _isEditing
-                              ? 'ذخیره تغییرات'
-                              : 'ثبت پروفایل یادبود',
+                          ? 'ذخیره تغییرات'
+                          : 'ثبت پروفایل یادبود',
                     ),
-                    style: FilledButton.styleFrom(
-                      shape: const StadiumBorder(),
-                    ),
+                    style: FilledButton.styleFrom(shape: const StadiumBorder()),
                   ),
                 ),
               ],
