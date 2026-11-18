@@ -1,3 +1,5 @@
+import 'package:shamsi_date/shamsi_date.dart';
+
 import 'package:backend/src/features/memorial_profiles/data/memorial_profile_repository.dart';
 
 /// Handles application rules for memorial profiles.
@@ -47,18 +49,23 @@ class MemorialProfileService {
       );
     }
 
-    final parsedBirthDate = _parseDate(birthDate, 'تاریخ تولد');
-    final parsedDeathDate = _parseDate(deathDate, 'تاریخ وفات');
+    final parsedBirthDate = _parseDate(
+      birthDate,
+      'تاریخ تولد',
+    );
 
-    if (parsedBirthDate != null &&
-        parsedDeathDate != null &&
-        parsedDeathDate.isBefore(parsedBirthDate)) {
-      throw const MemorialProfileException(
-        'تاریخ وفات نمی‌تواند قبل از تاریخ تولد باشد.',
-      );
-    }
+    final parsedDeathDate = _parseDate(
+      deathDate,
+      'تاریخ وفات',
+    );
+
+    _validateDateOrder(
+      parsedBirthDate,
+      parsedDeathDate,
+    );
 
     final normalizedMemorialText = memorialText?.trim();
+
     if (normalizedMemorialText != null &&
         normalizedMemorialText.length > 10000) {
       throw const MemorialProfileException(
@@ -67,6 +74,7 @@ class MemorialProfileService {
     }
 
     final normalizedGraveAddress = graveAddress?.trim();
+
     if (normalizedGraveAddress != null && normalizedGraveAddress.length > 500) {
       throw const MemorialProfileException(
         'نشانی مزار نمی‌تواند بیشتر از ۵۰۰ کاراکتر باشد.',
@@ -74,7 +82,9 @@ class MemorialProfileService {
     }
 
     if (photoMediaAssetId != null && photoMediaAssetId < 1) {
-      throw const MemorialProfileException('شناسه تصویر معتبر نیست.');
+      throw const MemorialProfileException(
+        'شناسه تصویر معتبر نیست.',
+      );
     }
 
     return _repository.createProfile(
@@ -139,18 +149,23 @@ class MemorialProfileService {
       );
     }
 
-    final parsedBirthDate = _parseDate(birthDate, 'تاریخ تولد');
-    final parsedDeathDate = _parseDate(deathDate, 'تاریخ وفات');
+    final parsedBirthDate = _parseDate(
+      birthDate,
+      'تاریخ تولد',
+    );
 
-    if (parsedBirthDate != null &&
-        parsedDeathDate != null &&
-        parsedDeathDate.isBefore(parsedBirthDate)) {
-      throw const MemorialProfileException(
-        'تاریخ وفات نمی‌تواند قبل از تاریخ تولد باشد.',
-      );
-    }
+    final parsedDeathDate = _parseDate(
+      deathDate,
+      'تاریخ وفات',
+    );
+
+    _validateDateOrder(
+      parsedBirthDate,
+      parsedDeathDate,
+    );
 
     final normalizedMemorialText = memorialText?.trim();
+
     if (normalizedMemorialText != null &&
         normalizedMemorialText.length > 10000) {
       throw const MemorialProfileException(
@@ -159,6 +174,7 @@ class MemorialProfileService {
     }
 
     final normalizedGraveAddress = graveAddress?.trim();
+
     if (normalizedGraveAddress != null && normalizedGraveAddress.length > 500) {
       throw const MemorialProfileException(
         'نشانی مزار نمی‌تواند بیشتر از ۵۰۰ کاراکتر باشد.',
@@ -166,7 +182,9 @@ class MemorialProfileService {
     }
 
     if (photoMediaAssetId != null && photoMediaAssetId < 1) {
-      throw const MemorialProfileException('شناسه تصویر معتبر نیست.');
+      throw const MemorialProfileException(
+        'شناسه تصویر معتبر نیست.',
+      );
     }
 
     final profile = await _repository.updateProfile(
@@ -217,7 +235,9 @@ class MemorialProfileService {
     required int userId,
   }) async {
     if (userId < 1) {
-      throw const MemorialProfileException('شناسه کاربر معتبر نیست.');
+      throw const MemorialProfileException(
+        'شناسه کاربر معتبر نیست.',
+      );
     }
 
     return _repository.getUserProfiles(userId: userId);
@@ -246,29 +266,91 @@ class MemorialProfileService {
     }
   }
 
-  DateTime? _parseDate(String? value, String fieldName) {
-    if (value == null || value.trim().isEmpty) return null;
+  /// Validates and normalizes a Jalali date string.
+  ///
+  /// New values must use YYYY/MM/DD.
+  /// No DateTime conversion is performed.
+  String? _parseDate(String? value, String fieldName) {
+    if (value == null || value.trim().isEmpty) {
+      return null;
+    }
 
-    final normalizedValue = value.trim();
+    final normalized = _normalizeDigits(value.trim());
 
-    if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(normalizedValue)) {
+    final match = RegExp(
+      r'^(\d{4})/(\d{2})/(\d{2})$',
+    ).firstMatch(normalized);
+
+    if (match == null) {
       throw MemorialProfileException(
-        '$fieldName باید با قالب YYYY-MM-DD ارسال شود.',
+        '$fieldName باید با قالب شمسی YYYY/MM/DD ارسال شود.',
       );
     }
 
-    final parsed = DateTime.tryParse(normalizedValue);
+    final year = int.parse(match.group(1)!);
+    final month = int.parse(match.group(2)!);
+    final day = int.parse(match.group(3)!);
 
-    if (parsed == null ||
-        parsed.toIso8601String().substring(0, 10) != normalizedValue) {
-      throw MemorialProfileException('$fieldName معتبر نیست.');
+    try {
+      final date = Jalali(year, month, day);
+
+      if (date > Jalali.now()) {
+        throw MemorialProfileException(
+          '$fieldName نمی‌تواند در آینده باشد.',
+        );
+      }
+    } on DateException {
+      throw MemorialProfileException(
+        '$fieldName معتبر نیست.',
+      );
     }
 
-    return DateTime.utc(parsed.year, parsed.month, parsed.day);
+    return normalized;
+  }
+
+  void _validateDateOrder(
+    String? birthDate,
+    String? deathDate,
+  ) {
+    if (birthDate == null || deathDate == null) {
+      return;
+    }
+
+    // Fixed-width YYYY/MM/DD strings are lexicographically sortable.
+    if (deathDate.compareTo(birthDate) < 0) {
+      throw const MemorialProfileException(
+        'تاریخ وفات نمی‌تواند قبل از تاریخ تولد باشد.',
+      );
+    }
+  }
+
+  String _normalizeDigits(String value) {
+    const persian = '۰۱۲۳۴۵۶۷۸۹';
+    const arabic = '٠١٢٣٤٥٦٧٨٩';
+    const english = '0123456789';
+
+    return value.split('').map((character) {
+      final persianIndex = persian.indexOf(character);
+
+      if (persianIndex >= 0) {
+        return english[persianIndex];
+      }
+
+      final arabicIndex = arabic.indexOf(character);
+
+      if (arabicIndex >= 0) {
+        return english[arabicIndex];
+      }
+
+      return character;
+    }).join();
   }
 
   String? _emptyToNull(String? value) {
-    if (value == null || value.isEmpty) return null;
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+
     return value;
   }
 
