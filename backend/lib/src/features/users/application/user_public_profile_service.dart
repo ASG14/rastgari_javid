@@ -7,7 +7,7 @@ class UserPublicProfileService {
 
   final UserPublicProfileRepository _repository;
 
-  /// Retrieves a public profile for the authenticated viewer.
+  /// Retrieves a public profile and its status for the authenticated viewer.
   Future<Map<String, dynamic>> getPublicProfile({
     required int viewerUserId,
     required int targetUserId,
@@ -37,7 +37,7 @@ class UserPublicProfileService {
       );
     }
 
-    return result['profile'] as Map<String, dynamic>;
+    return result;
   }
 }
 

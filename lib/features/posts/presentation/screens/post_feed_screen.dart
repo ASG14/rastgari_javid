@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../auth/data/auth_repository.dart';
 import '../../../auth/models/auth_user.dart';
-import '../../../comments/presentation/screens/post_comments_screen.dart';
+import '../../../profile/presentation/screens/user_profile_screen.dart';
 import '../../data/posts_repository.dart';
 import '../../models/post.dart';
 import '../widgets/post_card.dart';
@@ -40,14 +40,11 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
   String? _errorMessage;
   String? _loadMoreErrorMessage;
 
-  // Identifies the current feed request generation.
-  // Responses from older generations are ignored.
   int _requestGeneration = 0;
 
   @override
   void initState() {
     super.initState();
-
     _scrollController.addListener(_handleScroll);
     _loadPosts();
   }
@@ -57,7 +54,6 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
     _scrollController
       ..removeListener(_handleScroll)
       ..dispose();
-
     super.dispose();
   }
 
@@ -76,6 +72,16 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
     });
   }
 
+  Future<String> _requireAccessToken() async {
+    final token = await widget.authRepository.readAccessToken();
+
+    if (token == null || token.isEmpty) {
+      throw Exception('نشست کاربری معتبر نیست. لطفاً دوباره وارد شوید.');
+    }
+
+    return token;
+  }
+
   Future<void> _loadPosts() async {
     final requestGeneration = ++_requestGeneration;
 
@@ -89,7 +95,7 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
     });
 
     try {
-      final token = await widget.authRepository.readAccessToken();
+      final token = await _requireAccessToken();
 
       final page = await _postsRepository.getPublicPosts(
         token: token,
@@ -134,7 +140,7 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
     });
 
     try {
-      final token = await widget.authRepository.readAccessToken();
+      final token = await _requireAccessToken();
 
       final page = await _postsRepository.getPublicPosts(
         token: token,
@@ -152,7 +158,6 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
 
       setState(() {
         final existingIds = _posts.map((post) => post.id).toSet();
-
         final newPosts = page.posts.where((post) => existingIds.add(post.id));
 
         _posts = [..._posts, ...newPosts];
@@ -172,47 +177,33 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
     }
   }
 
-  Future<void> _handleLikeChanged(Post post, bool isLiked) async {
-    final token = await widget.authRepository.readAccessToken();
+  void _openAuthorProfile(Post post) {
+    final authorId = int.tryParse(post.author.id);
 
-    if (token == null || token.isEmpty) {
-      throw Exception('برای ثبت همدلی باید وارد حساب کاربری شوید.');
+    if (authorId == null || authorId < 1) {
+      _showMessage('شناسه نویسنده معتبر نیست.');
+      return;
     }
 
-    final result = await _postsRepository.setPostLike(
-      postId: post.id,
-      isLiked: isLiked,
-      token: token,
+    if (authorId == widget.user.id) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => UserProfileScreen(
+          userId: authorId,
+          currentUserId: widget.user.id,
+          authRepository: widget.authRepository,
+        ),
+      ),
     );
+  }
 
-    final serverPostId = result['post_id']?.toString();
-    final serverIsLiked = result['is_liked'];
-    final serverLikeCount = result['likes_count'];
-
-    if (serverIsLiked is! bool || serverLikeCount is! num) {
-      throw const FormatException(
-        'پاسخ سرور برای به‌روزرسانی همدلی معتبر نیست.',
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
-    }
-
-    if (serverPostId != null && serverPostId != post.id) {
-      throw const FormatException(
-        'شناسه پست در پاسخ سرور با پست انتخاب‌شده مطابقت ندارد.',
-      );
-    }
-
-    if (!mounted) return;
-
-    setState(() {
-      _posts = _posts.map((item) {
-        if (item.id != post.id) return item;
-
-        return item.copyWith(
-          isLiked: serverIsLiked,
-          likeCount: serverLikeCount.toInt(),
-        );
-      }).toList();
-    });
   }
 
   Widget _buildPaginationFooter(BuildContext context) {
@@ -327,32 +318,8 @@ class _PostFeedScreenState extends State<PostFeedScreen> {
                 PostCard(
                   key: ValueKey(post.id),
                   post: post,
-                  onLikeChanged: (isLiked) {
-                    return _handleLikeChanged(post, isLiked);
-                  },
-                  onCommentsTap: () async {
-                    await Navigator.of(context).push<bool>(
-                      MaterialPageRoute<bool>(
-                        builder: (context) => PostCommentsScreen(
-                          post: post,
-                          authRepository: widget.authRepository,
-                        ),
-                      ),
-                    );
-
-                    if (mounted) {
-                      await _loadPosts();
-                    }
-                  },
-                  onShareTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'اشتراک‌گذاری در مرحله بعد اضافه می‌شود.',
-                        ),
-                      ),
-                    );
-                  },
+                  authRepository: widget.authRepository,
+                  onAuthorTap: () => _openAuthorProfile(post),
                 ),
               _buildPaginationFooter(context),
             ],

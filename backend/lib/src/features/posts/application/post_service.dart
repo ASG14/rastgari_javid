@@ -189,6 +189,109 @@ class PostService {
     };
   }
 
+  /// Returns a paginated list of posts visible on a user's profile.
+  ///
+  /// Visibility is enforced by the repository:
+  /// - The author can see all their own published posts.
+  /// - Public posts on public accounts are visible to everyone.
+  /// - Posts on private accounts require an accepted follow.
+  /// - Followers-only posts require an accepted follow.
+  /// - Blocked users cannot view each other's posts.
+  Future<Map<String, dynamic>> getUserPosts({
+    required int targetUserId,
+    required int currentUserId,
+    int limit = 20,
+    String? cursor,
+  }) async {
+    if (targetUserId < 1 || currentUserId < 1) {
+      throw const PostException(
+        'شناسه کاربر معتبر نیست.',
+      );
+    }
+
+    if (limit < 1 || limit > 50) {
+      throw const PostException(
+        'تعداد نوشته‌ها باید بین ۱ تا ۵۰ باشد.',
+      );
+    }
+
+    int? cursorPostId;
+    DateTime? cursorPublishedAt;
+    var cursorPublishedAtIsNull = false;
+
+    if (cursor != null) {
+      try {
+        final normalizedCursor = base64Url.normalize(cursor);
+        final decoded = jsonDecode(
+          utf8.decode(base64Url.decode(normalizedCursor)),
+        );
+
+        if (decoded is! Map<String, dynamic>) {
+          throw const FormatException();
+        }
+
+        final id = decoded['id'];
+        final publishedAt = decoded['published_at'];
+
+        if (id is! int || id < 1) {
+          throw const FormatException();
+        }
+
+        cursorPostId = id;
+
+        if (publishedAt == null) {
+          cursorPublishedAtIsNull = true;
+        } else if (publishedAt is String) {
+          cursorPublishedAt = DateTime.tryParse(publishedAt);
+
+          if (cursorPublishedAt == null) {
+            throw const FormatException();
+          }
+        } else {
+          throw const FormatException();
+        }
+      } catch (_) {
+        throw const PostException(
+          'نشانگر صفحه‌بندی معتبر نیست.',
+        );
+      }
+    }
+
+    final rows = await _postRepository.getUserPosts(
+      targetUserId: targetUserId,
+      currentUserId: currentUserId,
+      limit: limit,
+      cursorPostId: cursorPostId,
+      cursorPublishedAt: cursorPublishedAt,
+      cursorPublishedAtIsNull: cursorPublishedAtIsNull,
+    );
+
+    final hasMore = rows.length > limit;
+    final posts = rows.take(limit).toList();
+
+    String? nextCursor;
+
+    if (hasMore && posts.isNotEmpty) {
+      final lastPost = posts.last;
+
+      final cursorData = jsonEncode({
+        'id': lastPost['id'],
+        'published_at': lastPost['published_at'],
+      });
+
+      nextCursor = base64Url.encode(utf8.encode(cursorData));
+    }
+
+    return {
+      'data': posts,
+      'pagination': {
+        'limit': limit,
+        'has_more': hasMore,
+        'next_cursor': nextCursor,
+      },
+    };
+  }
+
   /// Publishes a public post for the authenticated user.
   Future<Map<String, dynamic>> createPublicPost({
     required int userId,
@@ -291,7 +394,7 @@ class PostService {
 
 /// Represents a post-related validation error.
 class PostException implements Exception {
-  /// Creates a post exception with a user-facing message.
+  /// Creates a post exception.
   const PostException(this.message);
 
   /// The validation message.

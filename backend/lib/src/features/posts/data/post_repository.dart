@@ -3,9 +3,7 @@ import 'package:postgres/postgres.dart';
 
 /// Provides database operations for posts and post interactions.
 class PostRepository {
-  /// Retrieves posts visible to the current user.
-  ///
-  /// Retrieves a single post if it is visible to the current user.
+  /// Retrieves a post visible to the current user.
   ///
   /// Returns null when the post does not exist or access is denied.
   Future<Map<String, dynamic>?> getPostById({
@@ -102,11 +100,12 @@ class PostRepository {
     return _mapPost(result.first.toColumnMap());
   }
 
+  /// Retrieves a page of posts visible to the current user.
+  ///
   /// Public posts from public accounts are visible to everyone.
   /// Posts from private accounts are visible only to accepted followers.
   /// Followers-only posts are visible to followers and their author.
   /// Private posts are visible only to their author.
-  /// Retrieves a page of posts visible to the current user.
   ///
   /// Fetches one extra row to determine whether another page exists.
   Future<List<Map<String, dynamic>>> getPublicPosts({
@@ -246,62 +245,189 @@ class PostRepository {
   }) async {
     final result = await database.execute(
       Sql.named('''
-      SELECT
-        p.id AS post_id,
-        p.content,
-        p.visibility,
-        p.published_at,
-        p.created_at,
-        u.id AS author_id,
-        u.username,
-        u.display_name,
-        u.avatar_storage_key,
-        COALESCE(s.likes_count, 0) AS likes_count,
-        COALESCE(s.comments_count, 0) AS comments_count,
-        COALESCE(s.reposts_count, 0) AS reposts_count,
-        EXISTS (
-          SELECT 1
-          FROM public.post_likes AS pl
-          WHERE pl.post_id = p.id
-            AND pl.user_id = @userId
-        ) AS is_liked
-      FROM public.posts AS p
-      JOIN public.users AS u ON u.id = p.user_id
-      LEFT JOIN public.post_stats AS s ON s.post_id = p.id
-      WHERE
-        p.user_id = @userId
-        AND p.status = 'published'
-        AND p.deleted_at IS NULL
-        AND u.status = 'active'
-        AND u.deleted_at IS NULL
+        SELECT
+          p.id AS post_id,
+          p.content,
+          p.visibility,
+          p.published_at,
+          p.created_at,
+          u.id AS author_id,
+          u.username,
+          u.display_name,
+          u.avatar_storage_key,
+          COALESCE(s.likes_count, 0) AS likes_count,
+          COALESCE(s.comments_count, 0) AS comments_count,
+          COALESCE(s.reposts_count, 0) AS reposts_count,
+          EXISTS (
+            SELECT 1
+            FROM public.post_likes AS pl
+            WHERE pl.post_id = p.id
+              AND pl.user_id = @userId
+          ) AS is_liked
+        FROM public.posts AS p
+        JOIN public.users AS u ON u.id = p.user_id
+        LEFT JOIN public.post_stats AS s ON s.post_id = p.id
+        WHERE
+          p.user_id = @userId
+          AND p.status = 'published'
+          AND p.deleted_at IS NULL
+          AND u.status = 'active'
+          AND u.deleted_at IS NULL
 
-        AND (
-          CAST(@cursorPostId AS BIGINT) IS NULL
+          AND (
+            CAST(@cursorPostId AS BIGINT) IS NULL
 
-          OR (
-            @cursorPublishedAtIsNull = FALSE
-            AND (
-              p.published_at IS NULL
-              OR p.published_at < @cursorPublishedAt
-              OR (
-                p.published_at = @cursorPublishedAt
-                AND p.id < CAST(@cursorPostId AS BIGINT)
+            OR (
+              @cursorPublishedAtIsNull = FALSE
+              AND (
+                p.published_at IS NULL
+                OR p.published_at < @cursorPublishedAt
+                OR (
+                  p.published_at = @cursorPublishedAt
+                  AND p.id < CAST(@cursorPostId AS BIGINT)
+                )
+              )
+            )
+
+            OR (
+              @cursorPublishedAtIsNull = TRUE
+              AND p.published_at IS NULL
+              AND p.id < CAST(@cursorPostId AS BIGINT)
+            )
+          )
+
+        ORDER BY p.published_at DESC NULLS LAST, p.id DESC
+        LIMIT @fetchLimit
+      '''),
+      parameters: {
+        'userId': userId,
+        'cursorPostId': cursorPostId,
+        'cursorPublishedAt': cursorPublishedAt,
+        'cursorPublishedAtIsNull': cursorPublishedAtIsNull,
+        'fetchLimit': limit + 1,
+      },
+    );
+
+    return result.map((row) {
+      return _mapPost(row.toColumnMap());
+    }).toList();
+  }
+
+  /// Retrieves a paginated list of posts visible on a user's profile.
+  ///
+  /// The visibility rules are enforced in the database query:
+  /// - The author can see all their own published posts.
+  /// - Public posts on public accounts are visible to everyone.
+  /// - Posts on private accounts require an accepted follow.
+  /// - Followers-only posts require an accepted follow.
+  /// - Blocked users cannot view each other's posts.
+  Future<List<Map<String, dynamic>>> getUserPosts({
+    required int targetUserId,
+    required int currentUserId,
+    required int limit,
+    int? cursorPostId,
+    DateTime? cursorPublishedAt,
+    required bool cursorPublishedAtIsNull,
+  }) async {
+    final result = await database.execute(
+      Sql.named('''
+        SELECT
+          p.id AS post_id,
+          p.content,
+          p.visibility,
+          p.published_at,
+          p.created_at,
+          u.id AS author_id,
+          u.username,
+          u.display_name,
+          u.avatar_storage_key,
+          COALESCE(s.likes_count, 0) AS likes_count,
+          COALESCE(s.comments_count, 0) AS comments_count,
+          COALESCE(s.reposts_count, 0) AS reposts_count,
+          EXISTS (
+            SELECT 1
+            FROM public.post_likes AS pl
+            WHERE pl.post_id = p.id
+              AND pl.user_id = @currentUserId
+          ) AS is_liked
+        FROM public.posts AS p
+        JOIN public.users AS u ON u.id = p.user_id
+        LEFT JOIN public.post_stats AS s ON s.post_id = p.id
+        WHERE
+          p.user_id = @targetUserId
+          AND p.status = 'published'
+          AND p.deleted_at IS NULL
+          AND u.status = 'active'
+          AND u.deleted_at IS NULL
+
+          AND (
+            p.user_id = @currentUserId
+
+            OR (
+              p.visibility = 'public'
+              AND (
+                u.is_private = FALSE
+                OR EXISTS (
+                  SELECT 1
+                  FROM public.user_follows AS uf
+                  WHERE uf.follower_user_id = @currentUserId
+                    AND uf.following_user_id = u.id
+                )
+              )
+            )
+
+            OR (
+              p.visibility = 'followers'
+              AND EXISTS (
+                SELECT 1
+                FROM public.user_follows AS uf
+                WHERE uf.follower_user_id = @currentUserId
+                  AND uf.following_user_id = u.id
               )
             )
           )
 
-          OR (
-            @cursorPublishedAtIsNull = TRUE
-            AND p.published_at IS NULL
-            AND p.id < CAST(@cursorPostId AS BIGINT)
+          AND NOT EXISTS (
+            SELECT 1
+            FROM public.user_blocks AS b
+            WHERE (
+              b.blocker_user_id = @currentUserId
+              AND b.blocked_user_id = u.id
+            )
+            OR (
+              b.blocker_user_id = u.id
+              AND b.blocked_user_id = @currentUserId
+            )
           )
-        )
 
-      ORDER BY p.published_at DESC NULLS LAST, p.id DESC
-      LIMIT @fetchLimit
-    '''),
+          AND (
+            CAST(@cursorPostId AS BIGINT) IS NULL
+
+            OR (
+              @cursorPublishedAtIsNull = FALSE
+              AND (
+                p.published_at IS NULL
+                OR p.published_at < @cursorPublishedAt
+                OR (
+                  p.published_at = @cursorPublishedAt
+                  AND p.id < CAST(@cursorPostId AS BIGINT)
+                )
+              )
+            )
+
+            OR (
+              @cursorPublishedAtIsNull = TRUE
+              AND p.published_at IS NULL
+              AND p.id < CAST(@cursorPostId AS BIGINT)
+            )
+          )
+
+        ORDER BY p.published_at DESC NULLS LAST, p.id DESC
+        LIMIT @fetchLimit
+      '''),
       parameters: {
-        'userId': userId,
+        'targetUserId': targetUserId,
+        'currentUserId': currentUserId,
         'cursorPostId': cursorPostId,
         'cursorPublishedAt': cursorPublishedAt,
         'cursorPublishedAtIsNull': cursorPublishedAtIsNull,
@@ -675,6 +801,7 @@ class PostRepository {
     });
   }
 
+  /// Maps a database post row to the API response structure.
   Map<String, dynamic> _mapPost(Map<String, dynamic> data) {
     return {
       'id': data['post_id'],

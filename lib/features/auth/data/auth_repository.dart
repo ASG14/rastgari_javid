@@ -61,7 +61,7 @@ class AuthRepository {
   /// اطلاعات کاربر را با توکن ذخیره‌شده از سرور دریافت می‌کند.
   ///
   /// اگر توکنی وجود نداشته باشد یا سرور آن را رد کند، null برمی‌گرداند.
-  /// خطاهای دیگر، مانند قطع بودن سرور، به فراخواننده منتقل می‌شوند.
+  /// خطاهای دیگر به فراخواننده منتقل می‌شوند.
   Future<AuthUser?> getCurrentUser() async {
     final token = await _tokenStorage.readToken();
 
@@ -107,7 +107,6 @@ class AuthRepository {
     }
 
     final response = await _apiClient.get('/users/me', token: token);
-
     final data = response['data'];
 
     if (data is! Map<String, dynamic>) {
@@ -123,6 +122,7 @@ class AuthRepository {
     String? displayName,
     String? bio,
     bool updateBio = false,
+    bool? isPrivate,
   }) async {
     final token = await _tokenStorage.readToken();
 
@@ -137,6 +137,7 @@ class AuthRepository {
       if (username != null) 'username': username,
       if (displayName != null) 'display_name': displayName,
       if (updateBio) 'bio': bio,
+      if (isPrivate != null) 'is_private': isPrivate,
     };
 
     if (body.isEmpty) {

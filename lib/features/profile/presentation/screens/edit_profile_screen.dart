@@ -24,6 +24,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late final TextEditingController _displayNameController;
   late final TextEditingController _bioController;
 
+  late bool _isPrivate;
+
   bool _isSaving = false;
 
   @override
@@ -35,6 +37,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       text: widget.user.displayName,
     );
     _bioController = TextEditingController(text: widget.user.bio ?? '');
+
+    _isPrivate = widget.user.isPrivate;
   }
 
   @override
@@ -81,6 +85,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (_isSaving || !_formKey.currentState!.validate()) return;
 
     FocusScope.of(context).unfocus();
+
     setState(() => _isSaving = true);
 
     try {
@@ -93,6 +98,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         displayName: displayName,
         bio: bioText.isEmpty ? null : bioText,
         updateBio: true,
+        isPrivate: _isPrivate,
       );
 
       if (!mounted) return;
@@ -112,6 +118,59 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         setState(() => _isSaving = false);
       }
     }
+  }
+
+  Widget _buildPrivacySection(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Card(
+      elevation: 0,
+      color: colors.surfaceContainerLow,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'حریم خصوصی حساب',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              value: _isPrivate,
+              onChanged: _isSaving
+                  ? null
+                  : (value) {
+                      setState(() => _isPrivate = value);
+                    },
+              title: Text(
+                _isPrivate ? 'حساب خصوصی' : 'حساب عمومی',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(
+                _isPrivate
+                    ? 'برای مشاهده محتوای اختصاصی حساب شما، کاربران باید درخواست دنبال‌کردن بدهند.'
+                    : 'همه کاربران می‌توانند محتوای عمومی پروفایل شما را مشاهده کنند.',
+              ),
+              secondary: Icon(
+                _isPrivate ? Icons.lock_outline_rounded : Icons.public_rounded,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'تغییر این گزینه پس از ذخیره‌سازی اعمال می‌شود.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -170,6 +229,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 maxLength: 500,
                 validator: _validateBio,
               ),
+              const SizedBox(height: 20),
+              _buildPrivacySection(context),
               const SizedBox(height: 24),
               FilledButton.icon(
                 onPressed: _isSaving ? null : _saveProfile,
