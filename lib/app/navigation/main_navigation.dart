@@ -10,7 +10,7 @@ import '../../features/messages/presentation/screens/messages_screen.dart';
 import '../../features/notifications/data/notification_repository.dart';
 import '../../features/notifications/presentation/screens/notifications_screen.dart';
 import '../../features/posts/models/post.dart';
-import '../../features/posts/presentation/screens/create_post_screen.dart';
+import '../../features/posts/presentation/screens/create_content_screen.dart';
 import '../../features/profile/presentation/screens/edit_profile_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 
@@ -45,7 +45,7 @@ class _MainNavigationState extends State<MainNavigation> {
   static const List<String> _titles = [
     'خانه',
     'گفتگوها',
-    'افزودن پست',
+    'افزودن',
     'رویدادها',
     'پروفایل من',
   ];
@@ -53,7 +53,6 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   void initState() {
     super.initState();
-
     _user = widget.user;
     _refreshUnreadNotificationCount();
   }
@@ -158,6 +157,20 @@ class _MainNavigationState extends State<MainNavigation> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('نوشته با موفقیت منتشر شد.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _handleMemorialProfileCreated() {
+    setState(() {
+      _profileRefreshVersion++;
+      _currentIndex = 4;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('پروفایل عزیز آسمانی با موفقیت ثبت شد.'),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -319,9 +332,10 @@ class _MainNavigationState extends State<MainNavigation> {
         feedRefreshVersion: _feedRefreshVersion,
       ),
       const MessagesScreen(),
-      CreatePostScreen(
+      CreateContentScreen(
         authRepository: widget.authRepository,
         onPostCreated: _handlePostCreated,
+        onMemorialProfileCreated: _handleMemorialProfileCreated,
       ),
       const EventsScreen(),
       ProfileScreen(

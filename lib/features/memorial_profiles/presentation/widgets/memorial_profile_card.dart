@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import '../../models/memorial_profile.dart';
@@ -8,10 +7,19 @@ class MemorialProfileCard extends StatelessWidget {
     super.key,
     required this.profile,
     required this.onTap,
+    this.creatorName,
+    this.viewerName = 'من',
   });
 
   final MemorialProfile profile;
   final VoidCallback onTap;
+
+  /// نام سازنده در پروفایل عمومی.
+  /// در پروفایل شخصی مقدار «من» استفاده می‌شود.
+  final String? creatorName;
+
+  /// نام صاحب پروفایلی که کارت در آن نمایش داده می‌شود.
+  final String viewerName;
 
   String _relationshipLabel(String? relationship) {
     return switch (relationship) {
@@ -22,9 +30,33 @@ class MemorialProfileCard extends StatelessWidget {
       'child' => 'فرزند',
       'spouse' => 'همسر',
       'friend' => 'دوست',
-      'other' => 'سایر',
-      _ => 'مشخص نشده',
+      'other' => 'از نزدیکان',
+      _ => 'از نزدیکان',
     };
+  }
+
+  String _buildRelationshipText() {
+    final creatorRelationship = _relationshipLabel(profile.creatorRelationship);
+
+    final creator = (creatorName?.trim().isNotEmpty ?? false)
+        ? creatorName!.trim()
+        : profile.creatorDisplayName ?? 'سازنده پروفایل';
+
+    final creatorText = '$creatorRelationship $creator';
+
+    if (profile.isCreator) {
+      return creatorText.replaceFirst(creator, 'من');
+    }
+
+    final viewerRelationship = profile.relationship;
+
+    if (viewerRelationship == null || viewerRelationship.isEmpty) {
+      return creatorText;
+    }
+
+    final viewerText = '${_relationshipLabel(viewerRelationship)} $viewerName';
+
+    return '$creatorText، $viewerText';
   }
 
   @override
@@ -38,9 +70,7 @@ class MemorialProfileCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
-        side: BorderSide(
-          color: colors.outlineVariant.withValues(alpha: 0.65),
-        ),
+        side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.65)),
       ),
       child: InkWell(
         onTap: onTap,
@@ -67,23 +97,24 @@ class MemorialProfileCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      profile.fullName,
+                      'مرحوم ${profile.fullName}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 7),
                     Text(
-                      profile.isCreator
-                          ? 'سازنده پروفایل'
-                          : 'نسبت: ${_relationshipLabel(profile.relationship)}',
+                      _buildRelationshipText(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: colors.onSurfaceVariant,
+                        height: 1.7,
                       ),
                     ),
-                    const SizedBox(height: 7),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
                         Icon(
@@ -104,10 +135,7 @@ class MemorialProfileCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Icon(
-                Icons.chevron_left_rounded,
-                color: colors.onSurfaceVariant,
-              ),
+              Icon(Icons.chevron_left_rounded, color: colors.onSurfaceVariant),
             ],
           ),
         ),

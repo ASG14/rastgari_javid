@@ -11,6 +11,7 @@ class MemorialProfile {
     this.createdAt,
     this.updatedAt,
     this.creatorDisplayName,
+    this.creatorRelationship,
     this.membersCount = 0,
     this.isCreator = false,
     this.relationship,
@@ -21,16 +22,35 @@ class MemorialProfile {
   final int? createdByUserId;
   final String fullName;
   final int? photoMediaAssetId;
-  final DateTime? birthDate;
-  final DateTime? deathDate;
+
+  /// تاریخ شمسی یا مقدار میلادی قدیمی دیتابیس.
+  final String? birthDate;
+
+  /// تاریخ شمسی یا مقدار میلادی قدیمی دیتابیس.
+  final String? deathDate;
+
   final String? memorialText;
   final String? graveAddress;
+
+  /// زمان ایجاد رکورد.
   final DateTime? createdAt;
+
+  /// زمان آخرین ویرایش رکورد.
   final DateTime? updatedAt;
+
   final String? creatorDisplayName;
+
+  /// نسبت سازنده پروفایل با فرد مرحوم.
+  final String? creatorRelationship;
+
   final int membersCount;
+
+  /// آیا کاربر فعلی سازنده پروفایل است؟
   final bool isCreator;
+
+  /// نسبت کاربر فعلی با فرد مرحوم.
   final String? relationship;
+
   final MemorialMembership? membership;
 
   bool get hasPhoto => photoMediaAssetId != null;
@@ -45,13 +65,14 @@ class MemorialProfile {
       createdByUserId: _readInt(json['created_by_user_id']),
       fullName: _readString(json['full_name']) ?? '',
       photoMediaAssetId: _readInt(json['photo_media_asset_id']),
-      birthDate: _readDate(json['birth_date']),
-      deathDate: _readDate(json['death_date']),
+      birthDate: _readString(json['birth_date']),
+      deathDate: _readString(json['death_date']),
       memorialText: _readString(json['memorial_text']),
       graveAddress: _readString(json['grave_address']),
-      createdAt: _readDate(json['created_at']),
-      updatedAt: _readDate(json['updated_at']),
+      createdAt: _readTimestamp(json['created_at']),
+      updatedAt: _readTimestamp(json['updated_at']),
       creatorDisplayName: _readString(json['creator_display_name']),
+      creatorRelationship: _readString(json['creator_relationship']),
       membersCount: _readInt(json['members_count']) ?? 0,
       isCreator: json['is_creator'] == true,
       relationship:
@@ -66,13 +87,14 @@ class MemorialProfile {
       'created_by_user_id': createdByUserId,
       'full_name': fullName,
       'photo_media_asset_id': photoMediaAssetId,
-      'birth_date': _formatDate(birthDate),
-      'death_date': _formatDate(deathDate),
+      'birth_date': birthDate,
+      'death_date': deathDate,
       'memorial_text': memorialText,
       'grave_address': graveAddress,
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
       'creator_display_name': creatorDisplayName,
+      'creator_relationship': creatorRelationship,
       'members_count': membersCount,
       'is_creator': isCreator,
       'relationship': relationship,
@@ -81,7 +103,9 @@ class MemorialProfile {
   }
 
   static MemorialMembership? _readMembership(dynamic value) {
-    if (value is! Map) return null;
+    if (value is! Map) {
+      return null;
+    }
 
     return MemorialMembership.fromJson(Map<String, dynamic>.from(value));
   }
@@ -90,29 +114,26 @@ class MemorialProfile {
     if (value is int) return value;
     if (value is num) return value.toInt();
     if (value is String) return int.tryParse(value);
+
     return null;
   }
 
   static String? _readString(dynamic value) {
-    if (value == null) return null;
+    if (value == null) {
+      return null;
+    }
 
     final result = value.toString().trim();
+
     return result.isEmpty ? null : result;
   }
 
-  static DateTime? _readDate(dynamic value) {
-    if (value == null) return null;
+  static DateTime? _readTimestamp(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+
     return DateTime.tryParse(value.toString());
-  }
-
-  static String? _formatDate(DateTime? value) {
-    if (value == null) return null;
-
-    final year = value.year.toString().padLeft(4, '0');
-    final month = value.month.toString().padLeft(2, '0');
-    final day = value.day.toString().padLeft(2, '0');
-
-    return '$year-$month-$day';
   }
 }
 
@@ -157,6 +178,7 @@ class MemorialMembership {
     if (value is int) return value;
     if (value is num) return value.toInt();
     if (value is String) return int.tryParse(value);
+
     return null;
   }
 }

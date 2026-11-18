@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:shamsi_date/shamsi_date.dart';
 
 import '../../../auth/data/auth_repository.dart';
 import '../../data/memorial_profiles_repository.dart';
 import '../../models/memorial_profile.dart';
+import '../../utils/jalali_date.dart';
 
 class MemorialProfileFormScreen extends StatefulWidget {
   const MemorialProfileFormScreen({
@@ -19,7 +21,8 @@ class MemorialProfileFormScreen extends StatefulWidget {
       _MemorialProfileFormScreenState();
 }
 
-class _MemorialProfileFormScreenState extends State<MemorialProfileFormScreen> {
+class _MemorialProfileFormScreenState
+    extends State<MemorialProfileFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _repository = MemorialProfilesRepository();
 
@@ -28,19 +31,19 @@ class _MemorialProfileFormScreenState extends State<MemorialProfileFormScreen> {
   late final TextEditingController _graveAddressController;
 
   static const Map<String, String> _relationships = {
-    'mother': 'مادر',
-    'father': 'پدر',
-    'sister': 'خواهر',
-    'brother': 'برادر',
-    'child': 'فرزند',
-    'spouse': 'همسر',
-    'friend': 'دوست',
-    'other': 'سایر نسبت‌ها',
+    'mother': 'مادرم',
+    'father': 'پدرم',
+    'sister': 'خواهرم',
+    'brother': 'برادرم',
+    'child': 'فرزندم',
+    'spouse': 'همسرم',
+    'friend': 'دوستم',
+    'other': 'از نزدیکانم',
   };
 
   String? _relationship;
-  DateTime? _birthDate;
-  DateTime? _deathDate;
+  String? _birthDate;
+  String? _deathDate;
 
   bool _isSaving = false;
 
@@ -52,17 +55,27 @@ class _MemorialProfileFormScreenState extends State<MemorialProfileFormScreen> {
 
     final profile = widget.profile;
 
-    _nameController = TextEditingController(text: profile?.fullName ?? '');
+    _nameController = TextEditingController(
+      text: profile?.fullName ?? '',
+    );
+
     _memorialTextController = TextEditingController(
       text: profile?.memorialText ?? '',
     );
+
     _graveAddressController = TextEditingController(
       text: profile?.graveAddress ?? '',
     );
 
     _relationship = profile?.relationship;
-    _birthDate = profile?.birthDate;
-    _deathDate = profile?.deathDate;
+
+    _birthDate = JalaliDate.normalizeStoredDate(
+      profile?.birthDate,
+    );
+
+    _deathDate = JalaliDate.normalizeStoredDate(
+      profile?.deathDate,
+    );
   }
 
   @override
@@ -73,48 +86,280 @@ class _MemorialProfileFormScreenState extends State<MemorialProfileFormScreen> {
     super.dispose();
   }
 
-  String _formatDate(DateTime date) {
-    final year = date.year.toString().padLeft(4, '0');
-    final month = date.month.toString().padLeft(2, '0');
-    final day = date.day.toString().padLeft(2, '0');
+  Future<String?> _selectJalaliDate({
+    required String title,
+    String? initialValue,
+  }) async {
+    final now = Jalali.now();
 
-    return '$year-$month-$day';
-  }
+    final initial = JalaliDate.parse(initialValue) ?? now;
 
-  String _displayDate(DateTime? date) {
-    if (date == null) return 'انتخاب تاریخ';
+    int selectedYear = initial.year;
+    int selectedMonth = initial.month;
+    int selectedDay = initial.day;
 
-    final year = date.year.toString().padLeft(4, '0');
-    final month = date.month.toString().padLeft(2, '0');
-    final day = date.day.toString().padLeft(2, '0');
+    final firstYear = 1200;
+    final lastYear = now.year;
 
-    return '$year/$month/$day';
-  }
+    if (selectedYear < firstYear || selectedYear > lastYear) {
+      selectedYear = now.year;
+      selectedMonth = now.month;
+      selectedDay = now.day;
+    }
 
-  Future<void> _selectDate({required bool isBirthDate}) async {
-    final currentDate = isBirthDate ? _birthDate : _deathDate;
-    final initialDate = currentDate ?? DateTime(2000);
-
-    final selectedDate = await showDatePicker(
+    return showDialog<String>(
       context: context,
-      initialDate: initialDate,
-      firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
-      helpText: isBirthDate ? 'انتخاب تاریخ تولد' : 'انتخاب تاریخ وفات',
-      cancelText: 'انصراف',
-      confirmText: 'تأیید',
-      builder: (context, child) {
-        return Directionality(textDirection: TextDirection.rtl, child: child!);
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final monthLength = JalaliDate.daysInMonth(
+              selectedYear,
+              selectedMonth,
+            );
+
+            if (selectedDay > monthLength) {
+              selectedDay = monthLength;
+            }
+
+            final isCurrentYear = selectedYear == now.year;
+            final maximumMonth = isCurrentYear ? now.month : 12;
+
+            if (selectedMonth > maximumMonth) {
+              selectedMonth = maximumMonth;
+            }
+
+            final maximumDay =
+                selectedYear == now.year &&
+                        selectedMonth == now.month
+                    ? now.day
+                    : monthLength;
+
+            if (selectedDay > maximumDay) {
+              selectedDay = maximumDay;
+            }
+
+            return Directionality(
+              textDirection: TextDirection.rtl,
+              child: AlertDialog(
+                title: Text(title),
+                content: SizedBox(
+                  width: 360,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'تاریخ موردنظر را بر اساس تقویم شمسی انتخاب کنید.',
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 4,
+                            child: DropdownButtonFormField<int>(
+                              initialValue: selectedYear,
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                labelText: 'سال',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: [
+                                for (
+                                  int year = lastYear;
+                                  year >= firstYear;
+                                  year--
+                                )
+                                  DropdownMenuItem(
+                                    value: year,
+                                    child: Text(
+                                      JalaliDate.toPersianDigits(
+                                        year.toString(),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                              onChanged: (value) {
+                                if (value == null) return;
+
+                                setDialogState(() {
+                                  selectedYear = value;
+
+                                  final newMonthLength =
+                                      JalaliDate.daysInMonth(
+                                    selectedYear,
+                                    selectedMonth,
+                                  );
+
+                                  if (selectedDay > newMonthLength) {
+                                    selectedDay = newMonthLength;
+                                  }
+
+                                  if (selectedYear == now.year &&
+                                      selectedMonth > now.month) {
+                                    selectedMonth = now.month;
+                                  }
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 5,
+                            child: DropdownButtonFormField<int>(
+                              initialValue: selectedMonth,
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                labelText: 'ماه',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: [
+                                for (
+                                  int month = 1;
+                                  month <= maximumMonth;
+                                  month++
+                                )
+                                  DropdownMenuItem(
+                                    value: month,
+                                    child: Text(
+                                      JalaliDate.monthNames[month - 1],
+                                    ),
+                                  ),
+                              ],
+                              onChanged: (value) {
+                                if (value == null) return;
+
+                                setDialogState(() {
+                                  selectedMonth = value;
+
+                                  final newLength =
+                                      JalaliDate.daysInMonth(
+                                    selectedYear,
+                                    selectedMonth,
+                                  );
+
+                                  if (selectedDay > newLength) {
+                                    selectedDay = newLength;
+                                  }
+
+                                  final newMaximumDay =
+                                      selectedYear == now.year &&
+                                              selectedMonth == now.month
+                                          ? now.day
+                                          : newLength;
+
+                                  if (selectedDay > newMaximumDay) {
+                                    selectedDay = newMaximumDay;
+                                  }
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 3,
+                            child: DropdownButtonFormField<int>(
+                              initialValue: selectedDay,
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                labelText: 'روز',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: [
+                                for (
+                                  int day = 1;
+                                  day <= maximumDay;
+                                  day++
+                                )
+                                  DropdownMenuItem(
+                                    value: day,
+                                    child: Text(
+                                      JalaliDate.toPersianDigits(
+                                        day.toString(),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                              onChanged: (value) {
+                                if (value == null) return;
+
+                                setDialogState(() {
+                                  selectedDay = value;
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${JalaliDate.toPersianDigits(selectedDay.toString())} '
+                          '${JalaliDate.monthNames[selectedMonth - 1]} '
+                          '${JalaliDate.toPersianDigits(selectedYear.toString())}',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: const Text('انصراف'),
+                  ),
+                  FilledButton(
+                    onPressed: () {
+                      final result = JalaliDate.format(
+                        selectedYear,
+                        selectedMonth,
+                        selectedDay,
+                      );
+
+                      Navigator.of(dialogContext).pop(result);
+                    },
+                    child: const Text('تأیید تاریخ'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
       },
     );
+  }
 
-    if (selectedDate == null || !mounted) return;
+  Future<void> _selectDate({
+    required bool isBirthDate,
+  }) async {
+    final currentValue = isBirthDate ? _birthDate : _deathDate;
+
+    final selected = await _selectJalaliDate(
+      title: isBirthDate ? 'انتخاب تاریخ تولد' : 'انتخاب تاریخ وفات',
+      initialValue: currentValue,
+    );
+
+    if (selected == null || !mounted) {
+      return;
+    }
 
     setState(() {
       if (isBirthDate) {
-        _birthDate = selectedDate;
+        _birthDate = selected;
       } else {
-        _deathDate = selectedDate;
+        _deathDate = selected;
       }
     });
   }
@@ -162,16 +407,28 @@ class _MemorialProfileFormScreenState extends State<MemorialProfileFormScreen> {
   Future<void> _save() async {
     FocusScope.of(context).unfocus();
 
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
 
     if (!_isEditing && _relationship == null) {
       _showMessage('نسبت خود با مرحوم را مشخص کنید.');
       return;
     }
 
+    if (_birthDate != null && !JalaliDate.isValid(_birthDate)) {
+      _showMessage('تاریخ تولد معتبر نیست.');
+      return;
+    }
+
+    if (_deathDate != null && !JalaliDate.isValid(_deathDate)) {
+      _showMessage('تاریخ وفات معتبر نیست.');
+      return;
+    }
+
     if (_birthDate != null &&
         _deathDate != null &&
-        _deathDate!.isBefore(_birthDate!)) {
+        JalaliDate.isAfter(_birthDate!, _deathDate!)) {
       _showMessage('تاریخ وفات نمی‌تواند قبل از تاریخ تولد باشد.');
       return;
     }
@@ -182,7 +439,9 @@ class _MemorialProfileFormScreenState extends State<MemorialProfileFormScreen> {
       final token = await widget.authRepository.readAccessToken();
 
       if (token == null || token.isEmpty) {
-        throw Exception('نشست کاربری معتبر نیست. دوباره وارد شوید.');
+        throw Exception(
+          'نشست کاربری معتبر نیست. دوباره وارد شوید.',
+        );
       }
 
       final fullName = _nameController.text.trim();
@@ -194,8 +453,8 @@ class _MemorialProfileFormScreenState extends State<MemorialProfileFormScreen> {
           profileId: widget.profile!.id,
           fullName: fullName,
           token: token,
-          birthDate: _birthDate == null ? null : _formatDate(_birthDate!),
-          deathDate: _deathDate == null ? null : _formatDate(_deathDate!),
+          birthDate: _birthDate,
+          deathDate: _deathDate,
           memorialText: memorialText,
           graveAddress: graveAddress,
         );
@@ -204,8 +463,8 @@ class _MemorialProfileFormScreenState extends State<MemorialProfileFormScreen> {
           fullName: fullName,
           relationship: _relationship!,
           token: token,
-          birthDate: _birthDate == null ? null : _formatDate(_birthDate!),
-          deathDate: _deathDate == null ? null : _formatDate(_deathDate!),
+          birthDate: _birthDate,
+          deathDate: _deathDate,
           memorialText: memorialText,
           graveAddress: graveAddress,
         );
@@ -229,7 +488,10 @@ class _MemorialProfileFormScreenState extends State<MemorialProfileFormScreen> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
   }
 
@@ -266,19 +528,22 @@ class _MemorialProfileFormScreenState extends State<MemorialProfileFormScreen> {
   Widget _buildDateField({
     required String title,
     required String description,
-    required DateTime? value,
+    required String? value,
     required VoidCallback onTap,
     required VoidCallback onClear,
   }) {
     final colors = Theme.of(context).colorScheme;
+
+    final hasValue = value != null && value.isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           title,
-          style: Theme.of(context).textTheme.bodyMedium
-              ?.copyWith(fontWeight: FontWeight.w600),
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
         ),
         const SizedBox(height: 7),
         InkWell(
@@ -286,7 +551,10 @@ class _MemorialProfileFormScreenState extends State<MemorialProfileFormScreen> {
           borderRadius: BorderRadius.circular(14),
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 15,
+            ),
             decoration: BoxDecoration(
               border: Border.all(color: colors.outlineVariant),
               borderRadius: BorderRadius.circular(14),
@@ -301,20 +569,25 @@ class _MemorialProfileFormScreenState extends State<MemorialProfileFormScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    _displayDate(value),
+                    hasValue
+                        ? JalaliDate.display(value)
+                        : 'انتخاب تاریخ شمسی',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: value == null
-                          ? colors.onSurfaceVariant
-                          : colors.onSurface,
+                      color: hasValue
+                          ? colors.onSurface
+                          : colors.onSurfaceVariant,
                     ),
                   ),
                 ),
-                if (value != null)
+                if (hasValue)
                   IconButton(
                     tooltip: 'پاک کردن تاریخ',
                     onPressed: _isSaving ? null : onClear,
                     visualDensity: VisualDensity.compact,
-                    icon: const Icon(Icons.close_rounded, size: 19),
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      size: 19,
+                    ),
                   ),
               ],
             ),
@@ -323,8 +596,9 @@ class _MemorialProfileFormScreenState extends State<MemorialProfileFormScreen> {
         const SizedBox(height: 5),
         Text(
           description,
-          style: Theme.of(context).textTheme.bodySmall
-              ?.copyWith(color: colors.onSurfaceVariant),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: colors.onSurfaceVariant,
+          ),
         ),
       ],
     );
@@ -339,7 +613,11 @@ class _MemorialProfileFormScreenState extends State<MemorialProfileFormScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(_isEditing ? 'ویرایش پروفایل یادبود' : 'ثبت عزیز آسمانی'),
+          title: Text(
+            _isEditing
+                ? 'ویرایش پروفایل یادبود'
+                : 'ثبت عزیز آسمانی',
+          ),
         ),
         body: SafeArea(
           child: Form(
@@ -350,7 +628,9 @@ class _MemorialProfileFormScreenState extends State<MemorialProfileFormScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: colors.primaryContainer.withValues(alpha: 0.45),
+                    color: colors.primaryContainer.withValues(
+                      alpha: 0.45,
+                    ),
                     borderRadius: BorderRadius.circular(18),
                   ),
                   child: Row(
@@ -420,13 +700,12 @@ class _MemorialProfileFormScreenState extends State<MemorialProfileFormScreen> {
                 _buildSectionTitle(
                   context,
                   'تاریخ‌های مهم',
-                  description: 'وارد کردن تاریخ‌ها اختیاری است.',
+                  description: 'تاریخ‌ها را بر اساس تقویم شمسی وارد کنید. ثبت آن‌ها اختیاری است.',
                 ),
                 const SizedBox(height: 14),
                 _buildDateField(
                   title: 'تاریخ تولد',
-                  description:
-                      'تاریخ‌ها در حال حاضر با تقویم میلادی انتخاب می‌شوند.',
+                  description: 'تاریخ تولد عزیز آسمانی',
                   value: _birthDate,
                   onTap: () => _selectDate(isBirthDate: true),
                   onClear: () => _clearDate(isBirthDate: true),
@@ -434,7 +713,7 @@ class _MemorialProfileFormScreenState extends State<MemorialProfileFormScreen> {
                 const SizedBox(height: 18),
                 _buildDateField(
                   title: 'تاریخ وفات',
-                  description: 'در صورت تمایل می‌توانید این تاریخ را ثبت کنید.',
+                  description: 'تاریخ درگذشت عزیز آسمانی',
                   value: _deathDate,
                   onTap: () => _selectDate(isBirthDate: false),
                   onClear: () => _clearDate(isBirthDate: false),
@@ -513,17 +792,21 @@ class _MemorialProfileFormScreenState extends State<MemorialProfileFormScreen> {
                         ? const SizedBox(
                             width: 19,
                             height: 19,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                            ),
                           )
                         : const Icon(Icons.check_rounded),
                     label: Text(
                       _isSaving
                           ? 'در حال ذخیره اطلاعات...'
                           : _isEditing
-                          ? 'ذخیره تغییرات'
-                          : 'ثبت پروفایل یادبود',
+                              ? 'ذخیره تغییرات'
+                              : 'ثبت پروفایل یادبود',
                     ),
-                    style: FilledButton.styleFrom(shape: const StadiumBorder()),
+                    style: FilledButton.styleFrom(
+                      shape: const StadiumBorder(),
+                    ),
                   ),
                 ),
               ],
