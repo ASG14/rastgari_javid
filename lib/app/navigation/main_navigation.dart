@@ -36,6 +36,7 @@ class _MainNavigationState extends State<MainNavigation> {
 
   int _currentIndex = 0;
   int _feedRefreshVersion = 0;
+  int _profileRefreshVersion = 0;
   int _unreadNotificationCount = 0;
 
   bool _isLoggingOut = false;
@@ -160,6 +161,20 @@ class _MainNavigationState extends State<MainNavigation> {
         behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  void _handleDestinationSelected(int index) {
+    setState(() {
+      _currentIndex = index;
+
+      if (index == 4) {
+        _profileRefreshVersion++;
+      }
+    });
+
+    if (index == 0) {
+      _refreshUnreadNotificationCount();
+    }
   }
 
   Widget _buildNotificationButton() {
@@ -313,6 +328,7 @@ class _MainNavigationState extends State<MainNavigation> {
         user: _user,
         authRepository: widget.authRepository,
         onEditProfile: _openEditProfile,
+        refreshVersion: _profileRefreshVersion,
       ),
     ];
 
@@ -331,15 +347,7 @@ class _MainNavigationState extends State<MainNavigation> {
         body: IndexedStack(index: _currentIndex, children: pages),
         bottomNavigationBar: AppBottomNavigation(
           currentIndex: _currentIndex,
-          onDestinationSelected: (index) {
-            setState(() {
-              _currentIndex = index;
-            });
-
-            if (index == 0) {
-              _refreshUnreadNotificationCount();
-            }
-          },
+          onDestinationSelected: _handleDestinationSelected,
         ),
       ),
     );

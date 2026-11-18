@@ -4,8 +4,10 @@ import '../../../auth/data/auth_repository.dart';
 import '../../../posts/data/posts_repository.dart';
 import '../../../posts/models/post.dart';
 import '../../../posts/presentation/widgets/post_card.dart';
+import '../../data/profile_repository.dart';
 import '../../data/user_profile_repository.dart';
 import '../widgets/profile_stats.dart';
+import '../widgets/profile_tabs.dart';
 
 class UserProfileScreen extends StatefulWidget {
   const UserProfileScreen({
@@ -23,25 +25,32 @@ class UserProfileScreen extends StatefulWidget {
   State<UserProfileScreen> createState() => _UserProfileScreenState();
 }
 
-class _UserProfileScreenState extends State<UserProfileScreen> {
+class _UserProfileScreenState extends State<UserProfileScreen>
+    with SingleTickerProviderStateMixin {
   final UserProfileRepository _repository = UserProfileRepository();
+  final ProfileRepository _profileRepository = ProfileRepository();
   final PostsRepository _postsRepository = PostsRepository();
 
   static const int _pageSize = 20;
+
+  late final TabController _tabController;
 
   Map<String, dynamic>? _profile;
   Map<String, dynamic>? _relationship;
 
   List<Post> _posts = [];
+  List<Map<String, dynamic>> _memorialProfiles = [];
 
   bool _isLoading = true;
   bool _isLoadingPosts = false;
+  bool _isLoadingMemorialProfiles = false;
   bool _isLoadingMore = false;
   bool _isUpdatingRelationship = false;
   bool _hasMore = false;
 
   String? _error;
   String? _postsError;
+  String? _memorialProfilesError;
   String? _nextCursor;
 
   int _postsRequestGeneration = 0;
@@ -60,7 +69,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   @override
   void initState() {
     super.initState();
+
+    _tabController = TabController(length: 3, vsync: this);
     _loadProfile();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<String> _readToken() async {
@@ -127,16 +144,19 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       });
 
       if (profile['can_view_posts'] == true) {
-        await _loadPosts();
+        await Future.wait([_loadPosts(), _loadMemorialProfiles()]);
       } else {
         ++_postsRequestGeneration;
 
         setState(() {
           _posts = [];
+          _memorialProfiles = [];
           _hasMore = false;
           _nextCursor = null;
           _postsError = null;
+          _memorialProfilesError = null;
           _isLoadingPosts = false;
+          _isLoadingMemorialProfiles = false;
           _isLoadingMore = false;
         });
       }
@@ -184,6 +204,38 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       setState(() {
         _postsError = error.toString();
         _isLoadingPosts = false;
+      });
+    }
+  }
+
+  Future<void> _loadMemorialProfiles() async {
+    if (!mounted || _isLoadingMemorialProfiles) return;
+
+    setState(() {
+      _isLoadingMemorialProfiles = true;
+      _memorialProfilesError = null;
+    });
+
+    try {
+      final token = await _readToken();
+
+      final profiles = await _profileRepository.getUserMemorialProfiles(
+        userId: widget.userId,
+        token: token,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _memorialProfiles = profiles;
+        _isLoadingMemorialProfiles = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _memorialProfilesError = error.toString();
+        _isLoadingMemorialProfiles = false;
       });
     }
   }
@@ -274,7 +326,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         await _repository.followUser(userId: widget.userId, token: token);
       }
 
-      // Fetch relationship and statistics again from the server.
       await _loadProfile();
     } catch (error) {
       if (!mounted) return;
@@ -451,9 +502,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     }
 
     if (_isLoadingPosts) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 48),
-        child: Center(child: CircularProgressIndicator()),
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(28),
+          child: CircularProgressIndicator(),
+        ),
       );
     }
 
@@ -554,6 +607,111 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildMemorialProfilesSection() {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    if (!_canViewPosts) {
+      return _buildLockedContent();
+    }
+
+    if (_isLoadingMemorialProfiles) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(28),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (_memorialProfilesError != null) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_off_outlined, size: 42),
+            const SizedBox(height: 10),
+            const Text('دریافت عزیزان آسمانی ناموفق بود.'),
+            const SizedBox(height: 12),
+            Text(
+              _memorialProfilesError!,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _loadMemorialProfiles,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('تلاش دوباره'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_memorialProfiles.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.favorite_border_rounded,
+              size: 44,
+              color: colors.primary,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'هنوز پروفایل یادبودی ثبت نشده است',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(12),
+      itemCount: _memorialProfiles.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        final memorial = _memorialProfiles[index];
+
+        final name = memorial['full_name']?.toString() ?? 'بدون نام';
+        final relationship = memorial['relationship']?.toString();
+        final isCreator = memorial['is_creator'] == true;
+
+        return Card(
+          elevation: 0,
+          color: colors.surfaceContainerLow,
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: colors.primaryContainer,
+              foregroundColor: colors.onPrimaryContainer,
+              child: const Icon(Icons.favorite_rounded),
+            ),
+            title: Text(
+              name,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            subtitle: Text(
+              isCreator
+                  ? 'سازنده پروفایل یادبود'
+                  : 'نسبت: ${relationship ?? 'مشخص نشده'}',
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -682,14 +840,32 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     const SizedBox(height: 24),
                     Divider(color: colors.outlineVariant),
                     const SizedBox(height: 12),
-                    Text(
-                      'نوشته‌ها',
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
+                    ProfileTabs(
+                      controller: _tabController,
+                      height: 560,
+                      tabs: const [
+                        Tab(text: 'نوشته‌ها'),
+                        Tab(text: 'عزیزان آسمانی'),
+                        Tab(text: 'رویدادها'),
+                      ],
+                      children: [
+                        _buildPostsSection(),
+                        _buildMemorialProfilesSection(),
+                        Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Text(
+                              'رویدادهای این کاربر در این بخش نمایش داده می‌شوند.',
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: colors.onSurfaceVariant,
+                                height: 1.8,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 16),
-                    _buildPostsSection(),
                   ],
                 ),
               ),

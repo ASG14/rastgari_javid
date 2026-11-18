@@ -7,6 +7,7 @@ import '../../../posts/models/post.dart';
 import '../../../posts/presentation/widgets/post_card.dart';
 import '../../data/profile_repository.dart';
 import '../widgets/profile_stats.dart';
+import '../widgets/profile_tabs.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
@@ -14,11 +15,13 @@ class ProfileScreen extends StatefulWidget {
     required this.user,
     required this.authRepository,
     required this.onEditProfile,
+    this.refreshVersion = 0,
   });
 
   final AuthUser user;
   final AuthRepository authRepository;
   final VoidCallback onEditProfile;
+  final int refreshVersion;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -72,6 +75,11 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (oldWidget.user.id != widget.user.id) {
       _loadMyPosts();
       _loadProfileData();
+      return;
+    }
+
+    if (oldWidget.refreshVersion != widget.refreshVersion) {
+      _refreshProfile();
     }
   }
 
@@ -284,22 +292,23 @@ class _ProfileScreenState extends State<ProfileScreen>
           children: [
             _buildProfileHeader(context),
             const SizedBox(height: 12),
-            _buildTabs(context),
-            SizedBox(
-              height: 520,
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildPostsTab(context),
-                  _buildMemorialProfilesTab(context),
-                  _buildUnavailableTab(
-                    context,
-                    icon: Icons.event_note_rounded,
-                    title: 'رویدادهای من',
-                    message: 'رویدادهای متعلق به حساب شما در این بخش نمایش داده می‌شوند.',
-                  ),
-                ],
-              ),
+            ProfileTabs(
+              controller: _tabController,
+              tabs: const [
+                Tab(text: 'پست‌ها'),
+                Tab(text: 'عزیزان من'),
+                Tab(text: 'رویدادهای من'),
+              ],
+              children: [
+                _buildPostsTab(context),
+                _buildMemorialProfilesTab(context),
+                _buildUnavailableTab(
+                  context,
+                  icon: Icons.event_note_rounded,
+                  title: 'رویدادهای من',
+                  message: 'رویدادهای متعلق به حساب شما در این بخش نمایش داده می‌شوند.',
+                ),
+              ],
             ),
           ],
         ),
@@ -415,25 +424,6 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildTabs(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
-    return TabBar(
-      controller: _tabController,
-      isScrollable: false,
-      labelColor: colors.primary,
-      unselectedLabelColor: colors.onSurfaceVariant,
-      indicatorColor: colors.primary,
-      indicatorWeight: 3,
-      labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-      tabs: const [
-        Tab(text: 'پست‌ها'),
-        Tab(text: 'عزیزان من'),
-        Tab(text: 'رویدادهای من'),
-      ],
     );
   }
 
