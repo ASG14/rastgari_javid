@@ -32,6 +32,20 @@ class ApiClient {
     return _handleResponse(response);
   }
 
+  Future<Map<String, dynamic>> put(
+    String path, {
+    Map<String, dynamic>? body,
+    String? token,
+  }) async {
+    final response = await _client.put(
+      _buildUri(path),
+      headers: _headers(token: token),
+      body: jsonEncode(body ?? <String, dynamic>{}),
+    );
+
+    return _handleResponse(response);
+  }
+
   Future<Map<String, dynamic>> patch(
     String path, {
     Map<String, dynamic>? body,
